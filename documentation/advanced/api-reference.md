@@ -1,7 +1,10 @@
-# 10 - API reference
+# API reference (advanced)
+
+> Prefer the live OpenAPI UI at `http://localhost:8000/api/docs` while the server runs.
+> Operator docs: [documentation/README.md](../README.md).
 
 The backend is a FastAPI app (`web/app.py` + `web/routers/`) that serves the SPA and a REST
-API. Interactive docs are available at `http://localhost:8000/api/docs` while the server runs.
+API.
 
 All long-running work (generate, recon, run, assess, export) is dispatched through the
 **job system** (`web/jobs.py`) rather than blocking HTTP calls.
@@ -52,7 +55,7 @@ All long-running work (generate, recon, run, assess, export) is dispatched throu
 | GET | `/api/sites/{site}/{component}/effective-settings` | Resolved settings |
 
 Intel workspace edits and credentials/paths inventory tools are **Premium** — see
-[01 - Overview](01-overview.md#community-vs-premium).
+[01 — Overview](../01-overview.md#community-vs-premium).
 
 ## Playbooks
 
@@ -144,9 +147,10 @@ so `generate-tests/core.py` applies the pipeline then attributes before writing 
 
 ## Payloads
 
-See [08 - Payloads & multimodal](08-payloads-multimodal.md) for `/api/payloads/*` routes.
+See [Missions — multimodal](../05-missions-and-strategies.md#multimodal-strategy) for
+operator notes; live routes are listed under `/api/payloads/*` in `/api/docs`.
 Standalone payload generation and other Premium-only surfaces respond with an upgrade
-message in Community — see [01 - Overview](01-overview.md#community-vs-premium).
+message in Community — see [01 — Overview](../01-overview.md#community-vs-premium).
 
 ## Logs & files
 

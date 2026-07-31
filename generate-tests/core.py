@@ -2132,6 +2132,45 @@ def _generate_attack_suite_body(
             flush=True,
         )
 
+    if strategy.output_subdir == "multimodal":
+        from playbooks.channel_promote import (
+            ensure_artifact_channel_potential,
+            playbook_has_artifact_categories,
+        )
+
+        scope_caps = ((hunt_scope or {}).get("capabilities") or {})
+        upload_ok = bool(scope_caps.get("file_upload"))
+        if not upload_ok:
+            try:
+                from pipeline.recon_context import resolve_capabilities_for_target
+
+                site = (os.getenv("GENBOUNTY_SITE") or "").strip()
+                component = (os.getenv("GENBOUNTY_COMPONENT") or "").strip()
+                caps, _ = resolve_capabilities_for_target(
+                    site, component, playbook_id, recon=target_recon
+                )
+                upload_ok = bool((caps or {}).get("file_upload"))
+            except Exception:
+                upload_ok = False
+        if upload_ok and not playbook_has_artifact_categories(
+            {"categories": categories_src}
+        ):
+            promote_src: Dict[str, Any] = {"categories": list(categories_src)}
+            if isinstance(rubric.get("playbook_config"), dict):
+                promote_src["playbook_config"] = rubric["playbook_config"]
+            promoted, promote_changes = ensure_artifact_channel_potential(promote_src)
+            if promote_changes:
+                categories_src = [
+                    c
+                    for c in (promoted.get("categories") or [])
+                    if isinstance(c, dict)
+                ]
+                print(
+                    "[generate] Promoted text categories for multimodal delivery: "
+                    + "; ".join(promote_changes[:6]),
+                    flush=True,
+                )
+
     applicable: List[Dict[str, Any]] = []
     for category in categories_src:
         if category_applicable_for_strategy(category, strategy.output_subdir):

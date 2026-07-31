@@ -37,7 +37,15 @@ submission:
   # Fields to fill in order before submit. One object per input.
   # Leading type: click + surface_prep: true rows are surface pre-steps (notices/tabs/levels/Start) replayed after every reload before the prompt.
   inputs:
-    - selector: "button[aria-label=\"Copy response\"]"
+    - selector: "#composer-plus-btn"
+      # Input type - affects how Playwright fills the field:
+      #   text | textarea | contenteditable | password | email | search
+      #   select | combobox | checkbox | radio | click | file (path_from: payload)
+      type: click
+      upload_prep: true
+      upload_menu: true
+      # value: optional fixed string (usually leave unset; tests supply the prompt)
+    - selector: "input[type=\"file\"]"
       # Input type - affects how Playwright fills the field:
       #   text | textarea | contenteditable | password | email | search
       #   select | combobox | checkbox | radio | click | file (path_from: payload)
@@ -54,10 +62,9 @@ submission:
   # Element that sends the prompt (button, etc.).
   submit_selector: "#composer-submit-button"
 
-  # Assistant message roots (role mode counts/reads these only — not user turns).
+  # Container(s) for assistant output - roots the response capture.
+  # Often a message list, bubble, or [data-testid="assistant-message"].
   response_selector: "[data-message-author-role=\"assistant\"]"
-  response_capture_mode: role
-  response_role_selector: "[data-message-author-role=\"assistant\"]"
 
   # Optional: descendant under response_selector - last visible match wins.
   # Use when the root holds multiple messages and you want the latest bubble.
@@ -66,6 +73,12 @@ submission:
   # Optional: narrower node for inner_text only (e.g. "> p" inside the bubble).
   # response_text_within_selector: "> p"
 
+  # Response capture strategy (auto-detected in Discovery for message lists).
+  # last = newest match; role = assistant-only roots;
+  # parity_odd / parity_even = alternating user/assistant threads.
+  response_capture_mode: "role"
+  response_role_selector: "[data-message-author-role=\"assistant\"]"
+
   # How to submit after filling inputs.
   # Options: click | enter
   submit_via: click
@@ -73,10 +86,12 @@ submission:
   # Max time to wait for a new response after submit, in milliseconds (min ~500).
   response_wait_ms: 60000
 
-  # Substrings to reject as non-actionable response text (case-insensitive,
-  # per-line when capture is longer). Recorded during Configure (welcome/intro
-  # click step) and may also be auto-appended from pre-submit chrome.
-  response_ignore_substrings: ['Hello! How can I help you today?']
+  # Optional: substrings to reject as non-actionable response text
+  # (case-insensitive; line-level for long captures). Prefer Configure's
+  # welcome/intro click step; also auto-learned from pre-submit chrome.
+  # response_ignore_substrings:
+  #   - welcome to our chat
+  #   - [beta notice]
 
   # Optional multi-turn UI mode (for tree-of-thoughts / batched suites):
   # mode: single | multi     - single = one prompt per case (default)

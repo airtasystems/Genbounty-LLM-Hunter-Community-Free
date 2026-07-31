@@ -2112,10 +2112,30 @@ const channelMismatchAction = computed(() => {
   const strategy = payload.strategy || ctx.gen.strategy || '';
   const artifactN = payload.artifact_categories;
   const textN = payload.text_categories;
+  const strategySlug = String(strategy || '').replace(/-/g, '_');
+  const strategyLabel = pretty(strategySlug);
+  const isMultimodalTextOnly =
+    strategySlug === 'multimodal'
+    && Number.isFinite(textN) && textN > 0
+    && Number.isFinite(artifactN) && artifactN === 0;
+  if (isMultimodalTextOnly) {
+    return {
+      playbook_id: playbookId,
+      strategy,
+      strategyLabel,
+      channelDetail: `${textN} text categor${textN === 1 ? 'y' : 'ies'} (0 artifact)`,
+      textCategories: textN,
+      canConvert: false,
+      multimodalTextOnly: true,
+      message:
+        'Multimodal needs artifact-channel categories. Soft-reload so promote logic is active, '
+        + 'confirm Recon shows file upload, then Generate again. '
+        + 'Regenerate the play to persist file/image/audio siblings on disk.',
+    };
+  }
   const channelDetail = Number.isFinite(artifactN)
     ? `${artifactN} artifact categor${artifactN === 1 ? 'y' : 'ies'}`
     : 'artifact-channel categories';
-  const strategyLabel = pretty(String(strategy || '').replace(/-/g, '_'));
   return {
     playbook_id: playbookId,
     strategy,
@@ -2123,6 +2143,7 @@ const channelMismatchAction = computed(() => {
     channelDetail,
     textCategories: textN,
     canConvert: Number.isFinite(artifactN) ? artifactN > 0 : true,
+    multimodalTextOnly: false,
     message:
       `Strategy “${strategyLabel}” only runs text-channel categories, but this play uses ${channelDetail}. `
       + 'For CTF targets with a text-only chat harness, convert the playbook to paste content inline instead of file upload.',

@@ -1,7 +1,7 @@
-# 20 - Scripts
+# Scripts (advanced)
 
-Maintainer and operator helpers under `scripts/`. Prefer the web UI / `main.py` for normal
-hunts; use these for offline analysis, asset bootstrap, or playbook repair.
+Maintainer helpers under `scripts/`. Prefer the web UI / `main.py` for normal hunts;
+use these for offline analysis, asset bootstrap, or playbook repair.
 
 Run from the repo root with the project venv Python (`python start.py` creates or reuses
 the local virtualenv).
@@ -15,7 +15,7 @@ python scripts/generation_yield_report.py path/to/pipeline_report.json
 python scripts/generation_yield_report.py 'browser-bot/sites/*/chat/logs/probes/*/pipeline_report.json'
 ```
 
-Also documented in [06 - CLI reference](06-cli-reference.md).
+Also documented in [CLI](../10-cli.md).
 
 ## `create_background_assets.py`
 
@@ -26,7 +26,7 @@ dropdown in the Multimodal editor).
 python scripts/create_background_assets.py
 ```
 
-See [08 - Payloads & multimodal](08-payloads-multimodal.md).
+See [Missions — multimodal](../05-missions-and-strategies.md#multimodal-strategy).
 
 ## `backfill_escalation_payload.py`
 
@@ -67,6 +67,6 @@ python scripts/build_advanced_multimodal_templates.py
 
 ## See also
 
-- [06 - CLI reference](06-cli-reference.md)
-- [08 - Payloads & multimodal](08-payloads-multimodal.md)
-- [16 - Closed-loop Enhance](16-closed-loop-enhance.md)
+- [CLI](../10-cli.md)
+- [Missions — multimodal](../05-missions-and-strategies.md#multimodal-strategy)
+- [Enhance & Auto-run](../06-enhance-and-auto-run.md)

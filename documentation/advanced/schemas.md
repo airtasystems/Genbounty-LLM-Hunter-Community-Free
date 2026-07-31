@@ -1,4 +1,7 @@
-# 11 - Artifacts & schemas
+# Artifacts & schemas (advanced)
+
+> Operator summary of paths: [Settings, LLMs & data](../07-settings-llms-and-data.md).
+> Export: [Export & reporting](../08-export-and-reporting.md).
 
 The pipeline produces a chain of JSON artifacts. Each stage consumes the previous one.
 
@@ -81,7 +84,7 @@ Top-level metadata includes `playbook`, `playbook_id`, `source_file`, and `strat
 These capture-quality flags (`capture_incomplete`, `artifact_delivered`) originate in the
 browser-bot submit step and are carried through `pipeline/convert_log.py`. They let the
 assessment distinguish a genuine model refusal from a failed capture or an undelivered
-artifact (see [04 - Architecture](04-architecture.md)).
+artifact (see [Architecture](architecture.md)).
 
 On **API** transport, provider structured refusals (HTTP 200 with empty assistant
 content and e.g. Anthropic `stop_reason: "refusal"` + `stop_details.category`, or

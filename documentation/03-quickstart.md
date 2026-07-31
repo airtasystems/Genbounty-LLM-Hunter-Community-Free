@@ -1,102 +1,72 @@
-# 03 - Quick start
+# 03 — Quick start
 
-This walks through a full run using the web UI, which is the primary interface. It assumes
-you have completed [02 - Installation](02-installation.md) and set at least
-your LLM provider key from `.env.example` (edit `.env`, or **Settings → Configure LLMs**
-after launch).
+Your first full hunt in the web UI. Complete [Installation](02-installation.md) first
+(at least one LLM provider key).
 
 > **Authorized testing only.** Only run against targets you are permitted to assess.
 
-## 1. Launch the UI
+## 1. Launch
 
 ```bash
 python start.py
 ```
 
-Open **http://localhost:8000**. If you have not set keys yet, open **Settings → Configure
-LLMs** and save a provider key before generating or assessing. The workflow follows the
-sidebar top to bottom.
+Open **http://localhost:8000**. If keys are missing, open **Settings → Configure LLMs**
+and save a provider key. Work down the sidebar top to bottom.
 
 ## 2. Connect Target
 
-Register the target under `browser-bot/sites/<host>/<component>/`.
+Register the product under test (a host + component, for example `chatgpt.com` / `chat`).
 
-- **Browser discovery**: the tool opens the target UI and probes selectors (input box,
-  send button, response area, file upload).
-- **API probe**: point at a chat HTTP endpoint instead of a UI.
+- **Browser discovery** — opens the UI and records the prompt box, Send, response area,
+  and (if present) file upload. Follow the on-screen **Do this now** steps.
+- **API probe** — point at a chat HTTP endpoint instead of a browser UI.
 
-This writes a per-component `config.yaml` (selectors or API transport). Auth options:
-
-- **UI login** / public access → session metadata in `auth.json` (gitignored)
-- **API key** → secret in `.env` as `TARGET_API_KEY_<SITE>_<COMPONENT>`; `auth.json` keeps
-  header/query metadata only
+Save login or an API key if the target needs auth. Details:
+[Using the UI — Connect Target](04-using-the-ui.md#connect-target).
 
 ## 3. Recon
 
-Run the browser or API probe to produce `recon.json` - a component baseline describing what
-the target supports (e.g. file upload, streaming, tool use). On API endpoints, only tools
-confirmed for **this** request count; hedged "available on other interfaces" answers are
-discarded.
+Run Recon so the tool learns what the target supports (file upload, tools, and so on).
+You want a healthy baseline before generating probes.
 
-After assessed runs, you can also use **Recon Round** or **Extract from report** to update
-per-play hunt learning in `intel/{playbook_id}.json`. When a playbook is selected,
-generation and assessment merge the baseline plus playbook intel.
+## 4. Plan a mission (optional but recommended)
 
-## 4. Forge
+Under **Missions**, create a play: a short hypothesis with clear success/fail rules.
+You can also use a shipped play such as `data_system_prompt_leak`.
 
-Pick a **playbook category**, then a **play** (attack hypothesis) within it, then a
-**strategy** (e.g. `zero_shot`, `jailbreak`, `multimodal`).
+See [Missions & strategies](05-missions-and-strategies.md).
 
-- The first run uses **stealth-first** prompts (no mandatory direct probes).
-- After a run and assessment exist, **Enhance and Run** uses closed-loop feedback; plain
-  **Generate** auto-enables feedback when a prior `pipeline_report.json` is present.
-- For max-critical compounding: after assessment, use **Enhance and Auto-Run** with Hunt
-  mode **Bug Bounty**, Max rounds 8, Stop-at High/Critical - theory uses shipped
-  `enhance_theory` → Grok (`offensive_fast`). Details: [16 - Closed-loop Enhance](16-closed-loop-enhance.md).
+## 5. Forge
 
-Output is a suite JSON under
+Pick your **play** and a **strategy** (start with `zero_shot`). Generate a probe suite.
+
+Output lands under
 `browser-bot/sites/<host>/<component>/tests/<strategy>/<playbook>.json`.
 
-See [07 - Playbooks & strategies](07-playbooks.md).
-
-## 5. (Optional) Multimodal
-
-For file-upload hunts, build multimodal artifacts (PDF, CSV, images, audio) in the
-**Multimodal** tab. With strategy `multimodal`, artifacts are materialized alongside the
-suite. See [08 - Payloads & multimodal](08-payloads-multimodal.md).
+If the target supports file upload and you want file-based probes, enable multimodal
+on Forge (or choose strategy `multimodal`). See
+[Multimodal strategy](05-missions-and-strategies.md#multimodal-strategy).
 
 ## 6. Attack
 
-Pick a **playbook category** (and a **play** + **strategy** for single-play scope), then
-execute. You get live browser screenshots and a results table. This writes
-`run_log.json`, which is normalized to `attack_log.json`.
+Select the same play/strategy and run. Watch live screenshots and the results table.
+This captures prompt/response evidence for each probe.
 
 ## 7. Analysis
 
-Judge each result's severity from `indeterminate` through `critical`. This writes
-`pipeline_report.json` with per-prompt reasoning and an optional `category_rollup`.
-
-See [11 - Artifacts & schemas](11-artifacts-and-schemas.md) for the report structure.
+Assess the run. You get severities from indeterminate through critical and a
+`pipeline_report.json` with per-probe reasoning.
 
 ## 8. Report
 
-- **Export as JSON**: download one report, or a batch (last 1h / 4h / 24h). No platform
-  credentials required.
-- **Submit to Genbounty**: POST to `https://genbounty.com` when `GENBOUNTY_API_KEY`
-  and a program `user_id` are configured.
+- **Export as JSON** — download findings (no Genbounty account needed)
+- **Submit to Genbounty** — when `GENBOUNTY_API_KEY` and a program user id are set
 
-See [12 - Export & reporting](12-export-and-reporting.md).
+See [Export & reporting](08-export-and-reporting.md).
 
-## Doing the same from the CLI
+## Next steps
 
-The web UI covers discovery, login, and playbooks. For scripting/CI, the equivalent core
-steps are:
-
-```bash
-python main.py generate --strategy zero_shot --playbook <your_mission_id> --site example.com --component chat
-python main.py run browser-bot/sites/example.com/chat/tests/zero-shot/<your_mission_id>.json \
-  --site example.com --component chat --assess
-python main.py export browser-bot/sites/example.com/chat/logs/.../pipeline_report.json
-```
-
-See [06 - CLI reference](06-cli-reference.md).
+- Sharpen after a report: [Enhance & Auto-run](06-enhance-and-auto-run.md)
+- Automate later: [CLI](10-cli.md)
+- Stuck? [Troubleshooting](09-troubleshooting.md)

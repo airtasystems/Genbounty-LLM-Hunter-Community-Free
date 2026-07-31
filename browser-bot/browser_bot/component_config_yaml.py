@@ -90,6 +90,8 @@ def _format_inputs(inputs: list[dict[str, Any]]) -> list[str]:
         lines.append(f"      type: {inp.get('type', 'text')}")
         if inp.get("upload_prep"):
             lines.append("      upload_prep: true")
+        if inp.get("upload_menu"):
+            lines.append("      upload_menu: true")
         if inp.get("surface_prep"):
             lines.append("      surface_prep: true")
         if inp.get("name") not in (None, ""):

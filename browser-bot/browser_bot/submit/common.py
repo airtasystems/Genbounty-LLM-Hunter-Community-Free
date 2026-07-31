@@ -2612,6 +2612,28 @@ async def _fill_input(
     if inp_type == "click":
         uploaded = False
         if _input_wants_upload_menu(inp):
+            # Open + / attach / More actions first, then pick the upload menuitem.
+            loc = await _resolve_click_locator(page, inp)
+            if loc is None:
+                log_resilience(
+                    "artifact_upload",
+                    detail=f"Upload menu trigger not found: {selector!r}",
+                )
+                return False
+            try:
+                if not await loc.is_visible():
+                    return False
+            except Exception:
+                return False
+            try:
+                await loc.click()
+                await asyncio.sleep(0.35)
+            except Exception as exc:
+                log_resilience(
+                    "artifact_upload",
+                    detail=f"Could not open upload menu {selector!r}: {exc}",
+                )
+                return False
             clicked, uploaded = await _click_upload_menu_item(page, artifact_path)
             if not clicked:
                 log_resilience(
@@ -3113,9 +3135,16 @@ async def _do_one_submit_step(
             # click them again (was ~2× latency for every pre-step).
             if inp.get("surface_prep"):
                 continue
-            # File-upload prep clicks are optional once the composer is usable
-            # (attachment menus disappear).
-            if inp.get("upload_prep") and await _text_inputs_usable(page, inputs):
+            # upload_menu is only needed when attaching a multimodal artifact.
+            if inp.get("upload_menu") and not artifact_path:
+                continue
+            # Generic upload_prep clicks are optional once the composer is usable.
+            # upload_menu (+ / attach) must still run when attaching a multimodal file.
+            if (
+                inp.get("upload_prep")
+                and not inp.get("upload_menu")
+                and await _text_inputs_usable(page, inputs)
+            ):
                 continue
             try:
                 await _fill_input(page, inp, text)

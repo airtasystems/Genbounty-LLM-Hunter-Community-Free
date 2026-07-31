@@ -5340,11 +5340,70 @@ def _best_action_selector(event: dict) -> str:
     return raw
 
 
+def _upload_menu_config(selector: str) -> dict:
+    """Composer + / attach / More actions: open menu before the file input step."""
+    return {
+        "selector": selector,
+        "type": "click",
+        "upload_prep": True,
+        "upload_menu": True,
+    }
+
+
+def _event_looks_like_upload_menu_trigger(
+    event: dict | None,
+    selector: str = "",
+) -> bool:
+    """True for + / attach / More actions chrome that reveals a file chooser menu."""
+    ev = event if isinstance(event, dict) else {}
+    sel = (selector or _best_action_selector(ev) or "").strip()
+    if not sel and not ev:
+        return False
+    label = str(
+        ev.get("innerText") or ev.get("ariaLabel") or ev.get("aria-label") or ""
+    ).strip()
+    meta = {
+        "ariaLabel": ev.get("ariaLabel") or ev.get("aria-label"),
+        "dataTestId": ev.get("dataTestId") or ev.get("data-testid"),
+        "id": ev.get("id"),
+        "innerText": ev.get("innerText"),
+        "ariaHaspopup": ev.get("ariaHaspopup") or ev.get("aria-haspopup"),
+    }
+    if _is_attach_menu_submit_chrome(sel, label=label, meta=meta):
+        return True
+    return _selector_looks_like_upload_menu_trigger(sel)
+
+
+def _selector_looks_like_upload_menu_trigger(selector: str) -> bool:
+    """Heuristic for ChatGPT-like composer-plus / attach menu triggers."""
+    sel = (selector or "").strip()
+    if not sel:
+        return False
+    if _is_attach_menu_submit_chrome(sel):
+        return True
+    low = sel.lower()
+    return any(
+        token in low
+        for token in (
+            "composer-plus",
+            "#composer-plus",
+            "more-actions",
+            "more_actions",
+            "attach-button",
+            "attach_button",
+            "upload-button",
+            "upload_button",
+        )
+    )
+
+
 def _upload_prep_input_config(event: dict, *, surface: bool = False) -> dict | None:
     """Map a menu/upload pick to a click-or-dropdown prep step (not a prompt field)."""
     sel = _best_action_selector(event)
     if not sel:
         return None
+    if not surface and _event_looks_like_upload_menu_trigger(event, sel):
+        return _upload_menu_config(sel)
     manual_type = _manual_input_type(event)
     if manual_type in _DROPDOWN_INPUT_TYPES:
         row = {"selector": sel, "type": manual_type, "upload_prep": True}
@@ -5382,6 +5441,8 @@ def _upload_prep_config(
     When ``surface=True``, also marks ``surface_prep`` so text-only runs still
     replay the click (level / Start / notice gates).
     """
+    if not surface and _selector_looks_like_upload_menu_trigger(selector):
+        return _upload_menu_config(selector)
     if kind in _DROPDOWN_INPUT_TYPES:
         row = {"selector": selector, "type": kind, "upload_prep": True}
     else:
@@ -6144,7 +6205,9 @@ def _normalize_discovered_input(inp: dict, *, before_file: bool = False) -> dict
         row.setdefault("path_from", "payload")
         return row
 
-    if inp_type == "click" or row.get("upload_prep"):
+    if inp_type == "click" or row.get("upload_prep") or row.get("upload_menu"):
+        if row.get("upload_menu") or _selector_looks_like_upload_menu_trigger(sel):
+            return _upload_menu_config(sel)
         row["upload_prep"] = True
         row["type"] = "click" if inp_type not in _DROPDOWN_INPUT_TYPES else inp_type
         return row
@@ -6271,6 +6334,43 @@ def _selector_for_html_element(tag) -> str:
     return ""
 
 
+def _detect_upload_menu_triggers_from_html(html: str) -> list[dict]:
+    """Detect composer + / attach / More actions triggers (ChatGPT-like)."""
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    candidates = []
+    for tag in soup.find_all(["button", "div", "span", "a"]):
+        if _is_attachment_menu_trigger(tag):
+            candidates.append(tag)
+            continue
+        sel = _selector_for_html_element(tag)
+        if sel and _selector_looks_like_upload_menu_trigger(sel):
+            candidates.append(tag)
+
+    for tag in candidates:
+        selector = _selector_for_html_element(tag)
+        if not selector or selector in seen:
+            continue
+        # Prefer id / data-testid based selectors for plus buttons.
+        tag_id = tag.get("id") or ""
+        testid = tag.get("data-testid") or ""
+        if tag_id and "plus" in tag_id.lower():
+            selector = f"#{tag_id}"
+        elif testid and any(k in testid.lower() for k in ("plus", "attach", "upload")):
+            selector = f'[data-testid="{testid}"]'
+        if selector in seen:
+            continue
+        seen.add(selector)
+        out.append(_upload_menu_config(selector))
+    return out
+
+
 def _detect_upload_menuitems_from_html(html: str) -> list[dict]:
     """Detect visible upload menu items (when the attachment menu is open at capture time)."""
     try:
@@ -6345,8 +6445,13 @@ def _detect_selects_from_html(html: str) -> list[dict]:
         if not selector or selector in seen:
             return
         seen.add(selector)
+        if _is_attachment_menu_trigger(tag) or _selector_looks_like_upload_menu_trigger(
+            selector
+        ):
+            out.append(_upload_menu_config(selector))
+            return
         row = _upload_prep_config(selector, kind=resolved_kind)
-        if resolved_kind in _DROPDOWN_INPUT_TYPES and not _is_attachment_menu_trigger(tag):
+        if resolved_kind in _DROPDOWN_INPUT_TYPES:
             row = _select_input_config(selector, resolved_kind)
             row["upload_prep"] = True
         out.append(row)
@@ -6716,7 +6821,11 @@ async def _manual_pick_once(
 
 
 async def _resolve_upload_file_config(page, file_event: dict) -> dict | None:
-    """Map an upload pick to a config input (file input, or click target when needed)."""
+    """Map an upload pick to a config input (file input, or click target when needed).
+
+    Composer + / attach / More actions must stay as ``upload_menu`` clicks. Do not
+    collapse them onto a page ``input[type=file]`` — that skips the open-menu step.
+    """
     sel = _best_action_selector(file_event)
     if not sel:
         return None
@@ -6728,12 +6837,22 @@ async def _resolve_upload_file_config(page, file_event: dict) -> dict | None:
     if tag == "input" and input_type == "file":
         return _file_input_config(sel)
 
+    # Keep +/attach menu openers as click + upload_menu (never replace with file input).
+    if _event_looks_like_upload_menu_trigger(file_event, sel):
+        return _upload_menu_config(sel)
+
+    if role in ("menuitem", "option", "menuitemradio", "menuitemcheckbox"):
+        return _upload_prep_input_config(file_event)
+
+    # Ambiguous non-menu picks: prefer a real file input when one is already visible.
     upload_info = await _detect_upload_capabilities(page)
     best = _pick_best_file_input(upload_info)
     if best and await _verify_selector_on_page(page, best):
-        return _file_input_config(best)
+        # Only collapse when the pick itself was not a distinct interactive control.
+        if tag in ("input",) or not _looks_like_click_target(sel):
+            return _file_input_config(best)
 
-    if role in ("menuitem", "option", "menuitemradio", "menuitemcheckbox"):
+    if _looks_like_click_target(sel):
         return _upload_prep_input_config(file_event)
 
     return _file_input_config(sel)
@@ -6788,13 +6907,24 @@ async def _configure_upload_discovery_combined(
             continue
 
         first_cfg = await _resolve_upload_file_config(page, first_event)
-        if first_cfg and (first_cfg.get("type") == "file"):
+        # Only short-circuit when the operator clicked a real file input — not when
+        # resolve collapsed (or used to collapse) a +/attach menu onto a hidden file.
+        if (
+            first_cfg
+            and first_cfg.get("type") == "file"
+            and not first_cfg.get("upload_menu")
+            and (first_event.get("tag") or "").lower() == "input"
+            and (first_event.get("inputType") or "").lower() == "file"
+        ):
             summary = f"Upload control (file):\n{first_cfg['selector']}"
             if await _manual_step_confirm(page, step_title, summary):
                 return None, first_cfg
             continue
-
-        dropdown_cfg = _upload_prep_input_config(first_event)
+        # upload_menu / prep clicks always continue to the file-input step.
+        if first_cfg and first_cfg.get("upload_menu"):
+            dropdown_cfg = first_cfg
+        else:
+            dropdown_cfg = _upload_prep_input_config(first_event) or first_cfg
         file_fields = _panel_step_fields(
             step_label,
             "File upload",
@@ -7943,7 +8073,10 @@ def run_training(site: str, component: str) -> bool:
         live_dropdown_inputs,
         _detect_selects_from_html(form_html),
     )
-    detected_menuitems = _detect_upload_menuitems_from_html(form_html)
+    detected_menuitems = _merge_input_rows(
+        _detect_upload_menu_triggers_from_html(form_html),
+        _detect_upload_menuitems_from_html(form_html),
+    )
     detected_start_surface = _detect_start_surface_from_html(form_html)
     detected_file_inputs = _merge_input_rows(
         live_file_inputs,

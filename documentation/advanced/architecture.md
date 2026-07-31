@@ -1,4 +1,7 @@
-# 04 - Architecture
+# Architecture (advanced)
+
+> Operator docs: [documentation/README.md](../README.md). Data locations for hunters:
+> [Settings, LLMs & data](../07-settings-llms-and-data.md).
 
 ## High-level flow
 
@@ -36,14 +39,14 @@
   `requirements.txt`, installs Playwright Chromium (with Ubuntu platform override where
   needed), then launches `web/app.py`.
 - **`main.py`** - scripting CLI for automation and CI. Subcommands: `generate`, `run`,
-  `security-assess`, `export`. See [06 - CLI reference](06-cli-reference.md).
+  `security-assess`, `export`. See [CLI](../10-cli.md).
 
 ### Web layer - `web/`
 
 - **`app.py`** - the FastAPI application entrypoint. Mounts static assets and includes
   routers under `web/routers/` for sites, components, auth, config, recon, intel,
   capabilities, playbooks, strategies, test files and prompt transforms, payloads, jobs,
-  credentials, cache settings, and logs. See [10 - API reference](10-api-reference.md).
+  credentials, cache settings, and logs. See [API reference](api-reference.md).
 - **`routers/`** - FastAPI route modules (`playbooks.py`, `tests.py`, `sites.py`, …).
   Handlers stay thin; heavier orchestration lives in `web/services/`.
 - **`services/`** - shared web-layer helpers. `playbook_authoring.py` owns generate/save
@@ -311,7 +314,7 @@ Focused regression coverage lives in `pipeline/tests/test_oracles.py`,
   `campaign.py`, `playbook_config.py` (re-export facade over `playbooks/config/`), and
   `_template.json`.
 - **`payloads/`** - multimodal artifact generators (PDF, CSV, image, QR, audio) and their
-  schemas. See [08 - Payloads & multimodal](08-payloads-multimodal.md).
+  schemas. See [Missions — multimodal](../05-missions-and-strategies.md#multimodal-strategy).
 
 ## Site / component directory model
 
@@ -345,4 +348,4 @@ From lowest to highest priority:
 4. `browser-bot/sites/<site>/<component>/config.yaml` (per-component overrides)
 
 `.env` holds API secrets only (provider keys, `GENBOUNTY_API_KEY`, `TARGET_API_KEY_*`).
-See [09 - Configuration](09-configuration.md) for details.
+See [Settings, LLMs & data](../07-settings-llms-and-data.md) for details.

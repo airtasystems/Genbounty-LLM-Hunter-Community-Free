@@ -67,6 +67,8 @@ def test_merge_puts_surface_pre_steps_first():
     ]
     assert merged[0].get("upload_prep") is True
     assert merged[0].get("surface_prep") is True
+    # Generic haspopup=menu attach chrome is stamped upload_menu for replay.
+    assert merged[2].get("upload_menu") is True
 
 
 def test_upload_prep_config_shape():
@@ -79,6 +81,8 @@ def test_upload_prep_config_shape():
     surface = _upload_prep_config('button:has-text("Start your Attack")', surface=True)
     assert surface.get("surface_prep") is True
     assert surface.get("upload_prep") is True
+    plus = _upload_prep_config("#composer-plus-btn")
+    assert plus.get("upload_menu") is True
 
 
 def test_merge_surface_dedupes_start_label_variants():

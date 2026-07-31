@@ -1,16 +1,15 @@
-# 01 - Overview
+# 01 — Overview
 
 ## What it is
 
-**Genbounty LLM Hunter** is a toolkit for **authorized** security testing of LLM-backed
-products - chatbots, AI agents, and LLM APIs. Instead of running one-off prompts by hand in
-a ChatGPT session, it provides a repeatable pipeline that:
+**Genbounty LLM Hunter** turns one-off prompt trials into a repeatable security hunt.
+You define a hypothesis (“play”), generate probes, run them against an authorized target,
+judge severity, and export evidence.
 
-- **generates** category-aligned adversarial probe suites from security rubrics ("plays"),
-- **executes** them at scale through browser automation (Playwright) or direct HTTP APIs,
-- **captures** prompt/response evidence per probe case,
-- **assesses** each finding for severity with AI-assisted judging, and
-- **delivers** structured reports as downloadable JSON or via Genbounty's import API.
+It works through:
+
+- **Browser automation** (Playwright) for chat UIs, or
+- **HTTP APIs** for chat/completion endpoints
 
 ## What it hunts
 
@@ -18,72 +17,66 @@ a ChatGPT session, it provides a repeatable pipeline that:
 - Jailbreaks and safety-guardrail bypasses
 - System prompt exfiltration
 - Sensitive data disclosure
-- Indirect injection via file uploads (PDF, CSV, images, audio)
-- Agentic / tool abuse and sandbox / code-execution breakouts
+- Indirect injection via file uploads (PDF, images, audio, and more)
+- Agentic / tool abuse and sandbox breakouts
 
 ## The pipeline
 
 ```
-connect -> recon -> generate -> (multimodal) -> Attack -> Analysis -> export & report
+connect → recon → Plan Mission → Forge → Attack → Analysis → export
 ```
 
-| Step | UI tab | Primary output |
-|------|--------|----------------|
-| Connect target | Connect Target | Target connection settings |
-| Recon | Recon | Target baseline recon |
-| Forge | Forge | Probe suite for the selected play and strategy |
-| Build artifacts | Multimodal | File/media probes when using the multimodal strategy |
-| Edit suites | Armory | Edits to categories and prompts |
-| Run probes | Attack | Run evidence and attack logs |
-| Assess findings | Analysis | Severity-scored pipeline report |
-| Submit | Report | Downloadable JSON, or submit to Genbounty |
+| Step | Where in the UI | What you get |
+|------|-----------------|--------------|
+| Connect target | Connect Target | How to talk to the product (UI or API) |
+| Recon | Recon | What the target can do (upload, tools, …) |
+| Plan a mission | Missions | A play with clear win/lose rules |
+| Generate probes | Forge | A suite of adversarial prompts |
+| Run probes | Attack | Captured prompt/response evidence |
+| Assess | Analysis | Severity-scored report |
+| Export | Report | JSON download or Genbounty submit |
+
+Details for each tab: [Using the UI](04-using-the-ui.md).
 
 ## Who this is for
 
-- **Bug bounty hunters** targeting AI chatbots, agents, and API-backed LLM apps.
-- **Whitehats / pentesters** running structured hunts on customer staging with exportable
-  evidence.
-- **AppSec / MLSec teams** doing regression runs per release and comparing severity
-  rollups across builds.
+- Bug bounty hunters testing AI chatbots, agents, and LLM APIs
+- Whitehats / pentesters who need structured evidence on staging
+- AppSec / MLSec teams running regression hunts across releases
 
 ## Scope
 
-Observable **black-box behavior only**: prompts, uploads, and responses. The tool does
-not attempt to access target infrastructure beyond what a user of the product could.
+Black-box only: prompts, uploads, and responses a normal user of the product could produce.
+It does not attack infrastructure beyond that.
 
 ## Community vs Premium
 
-This package is the **Community** edition of Genbounty LLM Hunter.
+This package is the **Community** edition.
 
-**Included in Community**
+**Included**
 
 - Connect Target, Recon, Missions, Forge, Armory, Attack, Analysis, Report
 - Enhance and Auto-run on Attack
 - Hunt modes **Bug Bounty** and **Compliance**
-- Multimodal **strategy** (file/media probes generated with your suite)
+- Multimodal **strategy** (file/media probes with your suite)
 - CLI generate / run / assess / export for supported strategies
 
-**Premium** (upgrade at [genbounty.com/llm-hunter](https://genbounty.com/llm-hunter))
+**Premium** — [genbounty.com/llm-hunter](https://genbounty.com/llm-hunter)
 
 | Feature | What it adds |
 |---------|----------------|
-| **Start Battle** | One-click unattended hunt that chains generate → attack → enhance |
-| **Adaptive** strategy | Multi-turn adaptive probing driven by live target replies |
-| **Multimodal builder** | Standalone Artifacts tab for crafting upload payloads by hand |
-| **Intel** | Dedicated intel workspace and credentials/paths inventory tools |
-| **Open Hunt** | Hunt mode that can broaden the hypothesis when a leaf stagnates |
+| **Start Battle** | One-click unattended hunt loop |
+| **Adaptive** strategy | Multi-turn probing driven by live replies |
+| **Multimodal builder** | Standalone tab for hand-crafted upload payloads |
+| **Intel** | Dedicated intel workspace |
+| **Open Hunt** | Hunt mode that can broaden a stuck hypothesis |
 
-In Community, Premium controls show an upgrade prompt in the UI. Prefer Attack
-**Enhance / Auto-run** instead of Start Battle.
+In Community, Premium controls show an upgrade prompt. Use Attack **Enhance / Auto-run**
+instead of Start Battle.
 
 ## Authorization and ethics
 
-This toolkit automates offensive prompts and exports findings. Use it **only** on targets
-and programs you are explicitly permitted to test. You are responsible for:
+Use this toolkit **only** on targets and programs you are explicitly permitted to test.
+You are responsible for scope, rate limits, terms of service, and responsible disclosure.
 
-- staying within the program's scope,
-- respecting rate limits and terms of service,
-- and following responsible-disclosure rules.
-
-See [12 - Export & reporting](12-export-and-reporting.md) for how findings are packaged for
-disclosure.
+See [Export & reporting](08-export-and-reporting.md) for how findings are packaged.

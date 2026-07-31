@@ -8,7 +8,7 @@ Use it to hunt **prompt injection**, **jailbreaks**, **system prompt exfiltratio
 
 > **Authorized testing only.** Use on targets and programs you are permitted to assess. You are responsible for scope, rate limits, and program rules.
 
-**Full documentation:** [documentation/](documentation/README.md).
+**Documentation:** [documentation/](documentation/README.md) — start with [Install](documentation/02-installation.md) and [Quick start](documentation/03-quickstart.md).
 
 This is the **Community** edition. Premium options (Start Battle, Adaptive, Intel, Open Hunt,
 standalone Multimodal builder) are marked in the UI — details in
@@ -33,19 +33,18 @@ The Genbounty AI Red Team Toolkit is powered by Genbounty LLM Hunter. Equip your
 
 ## Pipeline
 
+```
+connect → recon → Plan Mission → Forge → Attack → Analysis → export
+```
+
 | Step | UI tab | Output |
 |------|--------|--------|
 | Connect target | Connect Target | Target connection (+ optional auth) |
 | Recon | Recon | Target baseline recon |
-| Forge | Forge | Probe suites for the selected play/strategy |
-| Build artifacts | Multimodal strategy | File/media probes when that strategy is used |
-| Edit / run | Armory → Attack | Run evidence and attack logs |
-| Assess | Analysis | Severity-scored report |
-| Submit | Report | JSON download or Genbounty import |
-
-```
-connect → recon → generate → (multimodal) → Attack → Analysis → export & report
-```
+| Plan a mission | Missions | Play with win/lose rules |
+| Generate | Forge | Probe suite |
+| Run / assess | Attack → Analysis | Evidence + severity report |
+| Export | Report | JSON download or Genbounty import |
 
 ## Quick start
 
@@ -56,7 +55,7 @@ python start.py        # or python3 start.py
 
 Open **http://localhost:8000**, then: **Connect Target** → **Recon** → **Forge** (shipped play: `data_system_prompt_leak`) → **Attack** → **Analysis** → **Report**.
 
-Step-by-step: [03 - Quick start](documentation/03-quickstart.md). Install / Playwright notes: [02 - Installation](documentation/02-installation.md).
+Step-by-step: [Quick start](documentation/03-quickstart.md). Install notes: [Installation](documentation/02-installation.md).
 
 ### Secrets vs settings
 
@@ -65,6 +64,8 @@ Step-by-step: [03 - Quick start](documentation/03-quickstart.md). Install / Play
 | `.env` | API keys only (never commit). See `.env.example` for names. |
 | `llm.yaml` | Role → provider/model (Settings → Configure LLMs) |
 | `pipeline_settings.yaml` | Batch sizes, assess concurrency, cache toggles, export batching |
+
+More: [Settings, LLMs & data](documentation/07-settings-llms-and-data.md).
 
 ## CLI (automation / CI)
 
@@ -79,13 +80,16 @@ python main.py security-assess path/to/attack_log.json
 python main.py export path/to/pipeline_report.json
 ```
 
-`--playbook` is required unless you use `--all` / `--all-playbooks`. Full flags: [06 - CLI reference](documentation/06-cli-reference.md).
+`--playbook` is required unless you use `--all` / `--all-playbooks`. Full flags: [CLI](documentation/10-cli.md).
 
 ## Plays & strategies
 
-Hypothesis rubrics live in `playbooks/*.json` (schema v3). This repo ships **`data_system_prompt_leak`** plus `_template.json` (UI-excluded). Author more plays in the **Missions** tab; the category catalog covers the full L1/L2 taxonomy.
+Hypothesis rubrics live in `playbooks/*.json`. This repo ships **`data_system_prompt_leak`**
+plus `_template.json` (UI-excluded). Author more plays in **Missions**.
 
-Strategies include `zero_shot`, `multimodal`, `jailbreak`, multi-turn packs (`multi_shot`, `few_shot`, `iterative`, …), and shaping strategies (`chain_of_thought`, `tree_of_thoughts`, …). The **Adaptive** strategy is Premium. Details: [07 - Playbooks](documentation/07-playbooks.md), [08 - Multimodal](documentation/08-payloads-multimodal.md).
+Strategies include `zero_shot`, `multimodal`, `jailbreak`, multi-turn packs, and shaping
+strategies. **Adaptive** is Premium. Details:
+[Missions & strategies](documentation/05-missions-and-strategies.md).
 
 ## Project layout
 
@@ -97,7 +101,7 @@ Strategies include `zero_shot`, `multimodal`, `jailbreak`, multi-turn packs (`mu
 | `browser-bot/` | Playwright / API runner |
 | `pipeline/` | Convert, assess, export |
 | `playbooks/` / `payloads/` | Plays and multimodal generators |
-| `documentation/` | Full docs index |
+| `documentation/` | Operator docs (+ `advanced/` for internals) |
 
 ## License
 

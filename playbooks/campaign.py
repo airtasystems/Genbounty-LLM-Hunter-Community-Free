@@ -54,12 +54,8 @@ def _filter_strategies_by_capabilities(
                     "reason": "no file upload in component config",
                 })
                 continue
-            if channels.get("artifact", 0) <= 0:
-                skipped.append({
-                    "strategy": strat,
-                    "reason": "play has no artifact categories",
-                })
-                continue
+            # Text-only plays still get multimodal when upload exists — generate
+            # promotes artifact siblings in memory (and Create persists them).
         if strat in MULTI_TURN_STRATEGIES and not multi_turn_ok:
             skipped.append({
                 "strategy": strat,
