@@ -1,0 +1,108 @@
+        <!-- Firing Range -->
+        <template v-if="tab === 'manual'">
+          <div class="manual-view">
+            <div class="manual-view-header">
+              <div class="manual-view-title-row">
+                <h2>Firing Range</h2>
+                <span class="manual-view-hint">Ctrl/⌘+Enter to send</span>
+              </div>
+              <p v-if="!site || !component" class="cfg-note manual-scope-warn">
+                Select a site and component in the header before firing at the target.
+              </p>
+            </div>
+
+            <!-- @include prompt-transforms-panel.html -->
+
+            <div class="manual-workspace">
+              <div class="manual-pane manual-pane--prompt">
+                <div class="manual-pane-toolbar">
+                  <span class="manual-pane-label">Prompt</span>
+                  <div class="manual-composer-actions">
+                    <span
+                      v-if="manualNativeMsg"
+                      class="manual-native-msg"
+                      :title="manualNativeMsg"
+                    >{{ manualNativeMsg }}</span>
+                    <button
+                      type="button"
+                      class="manual-fire-btn"
+                      @click="startSampleRequest"
+                      :disabled="manualCommandBusy || manualNativeBusy || !(run.samplePrompt || '').trim()"
+                      :title="manualFireButtonTitle"
+                      :aria-label="manualFireBusyLabel"
+                    >
+                      <svg
+                        v-if="!manualCommandBusy"
+                        class="manual-fire-icon"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path
+                          fill="currentColor"
+                          d="M8.1 1.2c.2 1.6-.4 2.7-1.3 3.7-.7.8-1.5 1.5-1.9 2.6-.5 1.3-.2 2.7.7 3.7.2-.7.6-1.2 1.2-1.6-.1 1.5.4 2.6 1.4 3.5 1.2 1.1 2.9 1.4 4.3.7 1.5-.7 2.4-2.3 2.3-4-.1-2.3-1.5-3.5-2.5-4.6-.6-.7-1.1-1.4-1.2-2.3-.7.6-1.3 1.3-1.5 2.2.2-1.6-.2-2.9-1.5-3.9z"
+                        />
+                      </svg>
+                      <span v-else class="manual-fire-busy" aria-hidden="true"></span>
+                      <span class="manual-fire-label">{{ manualFireBusyLabel }}</span>
+                    </button>
+                    <label
+                      class="manual-assess-check"
+                      :class="{ 'manual-assess-check--busy': manualCommandBusy }"
+                      :title="manualAssessCheckboxTitle"
+                    >
+                      <input
+                        type="checkbox"
+                        v-model="run.manualAssess"
+                        :disabled="manualCommandBusy || manualNativeBusy"
+                      />
+                      <span>Assess</span>
+                    </label>
+                    <span
+                      v-if="manualAssessMsg"
+                      class="manual-assess-msg"
+                      :title="manualAssessMsg"
+                    >{{ manualAssessMsg }}</span>
+                  </div>
+                </div>
+                <textarea
+                  id="manual-command-prompt"
+                  class="manual-prompt"
+                  v-model="run.samplePrompt"
+                  placeholder="Ask the in-scope target…"
+                  :disabled="manualCommandBusy || manualNativeBusy"
+                  aria-label="Target prompt"
+                  @keydown.ctrl.enter.prevent="startSampleRequest"
+                  @keydown.meta.enter.prevent="startSampleRequest"
+                ></textarea>
+              </div>
+
+              <div class="manual-pane-split" aria-hidden="true"></div>
+
+              <div class="manual-pane manual-pane--reply">
+                <div class="manual-pane-toolbar">
+                  <span class="manual-pane-label">Target response</span>
+                  <div v-if="sampleResultAction" class="manual-reply-actions">
+                    <button
+                      type="button"
+                      class="manual-ghost-btn"
+                      :class="{ 'manual-ghost-btn--done': sampleIntelAdded }"
+                      @click="addSampleResultToNotes"
+                      :disabled="sampleIntelBusy || sampleIntelAdded || !site || !component"
+                      :title="sampleIntelMsg || 'Add Q→A to notes.json for this site/component'"
+                    >
+                      {{ sampleIntelBusy ? 'Adding…' : (sampleIntelAdded ? 'Added to notes' : 'Add to notes') }}
+                    </button>
+                    <span v-if="sampleIntelMsg" class="manual-reply-msg">{{ sampleIntelMsg }}</span>
+                  </div>
+                </div>
+                <div
+                  class="manual-reply-body"
+                  :class="{ 'manual-reply-body--empty': !sidebarSampleReply }"
+                >{{ sidebarSampleReply || 'Target response will appear here.' }}</div>
+              </div>
+            </div>
+          </div>
+        </template>

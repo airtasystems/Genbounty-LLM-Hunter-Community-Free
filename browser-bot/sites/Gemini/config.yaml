@@ -1,0 +1,43 @@
+# =============================================================================
+# Site config - browser-bot/sites/<site>/config.yaml
+# =============================================================================
+#
+# Shared settings for every component on this site. Component config.yaml
+# overrides values here for submission selectors and per-component settings.
+#
+# Precedence for settings: component → this file → config.py / .env →
+# config.defaults.yaml. See repo-root config.defaults.yaml for all settings keys.
+#
+# Created automatically on first Discovery run if missing.
+
+# --- Auth --------------------------------------------------------------------
+# Page opened for "Add Login" / manual sign-in. Usually the site root or /login.
+# http:// for localhost; https:// for production hosts.
+# Shared by all components on this site unless a component sets its own login_url.
+login_url: "https://Gemini"
+
+# --- Token refresh (optional) ------------------------------------------------
+# Used by browser-bot to renew auth tokens. Often set once at site level.
+# refresh_url: https://example.com/api/auth/refresh
+# refresh_mode: both
+# refresh_cookies:
+#   - session_id
+
+
+# --- Settings overrides (optional) ---------------------------------------------
+# Same keys as Settings → Browser Config and Cache Control. Apply site-wide; components may override.
+# Full list and allowed values: see config.defaults.yaml at repo root.
+#
+# settings:
+#   gemini_use_cache: false          # true | false
+#   intel_credentials_and_paths: true  # auto-extract credentials/paths after risk assessment
+#   FETCH_METHOD: pool               # auto | pool | cluster | human
+#   HEADLESS: true                   # true | false
+#   HUMAN_COUNTRY: UK                # US | UK | DE | FR | JP | CA | AU | NL | ES | IT
+#   CHROME_CHANNEL: chromium         # chromium | chrome | chrome-beta | msedge
+#   BLOCKED_TYPES: [image, font]     # image | font | media | stylesheet
+#   POOL_SIZE: 1
+#   POOL_CLUSTER_HUMAN_LIKE: true
+#   API_CONCURRENCY: 2
+#   EVASION_REQUEST_DELAY_S: 0.5
+#   RUN_SCREENSHOT_INTERVAL_S: 0.0  # 0 = disabled; 1–120 = interval seconds

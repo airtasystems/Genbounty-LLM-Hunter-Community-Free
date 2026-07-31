@@ -1,0 +1,30 @@
+  <div
+    v-if="showPremiumModal"
+    class="modal-overlay"
+    @click.self="closePremiumModal"
+  >
+    <div
+      class="modal modal-preview premium-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="premium-modal-title"
+      @keydown.esc.prevent="closePremiumModal"
+    >
+      <div class="modal-sub">Premium</div>
+      <h2 id="premium-modal-title" class="modal-title">
+        {{ premiumFeatureLabel(premiumActiveFeature) }}
+      </h2>
+      <p class="cfg-note premium-modal__body">
+        {{ premiumDetail(premiumActiveFeature) }}
+      </p>
+      <div class="modal-actions premium-modal-actions">
+        <a
+          class="btn btn-primary premium-modal__cta"
+          :href="PREMIUM_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Get Premium</a>
+        <button type="button" class="btn btn-ghost" @click="closePremiumModal">Close</button>
+      </div>
+    </div>
+  </div>

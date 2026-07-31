@@ -1,0 +1,30 @@
+          <div class="scope-readonly-table" role="group" aria-label="In-scope category and play">
+            <table>
+              <tbody>
+                <tr>
+                  <th scope="row">Category</th>
+                  <td>
+                    <span class="scope-readonly-val">{{ activeCategoryLabel }}</span>
+                    <button
+                      type="button"
+                      class="btn-icon-config"
+                      title="Change category in the top bar"
+                      aria-label="Change category in the top bar"
+                      @click="openHeaderScopeSelect('category')"
+                    >⚙</button>
+                  </td>
+                  <th scope="row">Play</th>
+                  <td>
+                    <span class="scope-readonly-val">{{ activePlaybookLabel }}</span>
+                    <button
+                      type="button"
+                      class="btn-icon-config"
+                      title="Change play in the top bar"
+                      aria-label="Change play in the top bar"
+                      @click="openHeaderScopeSelect('playbook')"
+                    >⚙</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>

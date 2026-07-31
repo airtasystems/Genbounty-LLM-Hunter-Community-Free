@@ -1,0 +1,386 @@
+        <!-- Analysis -->
+        <template v-if="tab === 'risk'">
+          <div class="risk-view" :class="{ 'risk-view--results-maximized': riskViewMaximizedActive }">
+            <div class="risk-view-controls">
+              <h2>Analysis</h2>
+              <div class="form-row risk-assess-row">
+                <label for="risk-attack-log">Attack Log</label>
+                <select id="risk-attack-log" v-model="risk.log">
+                  <option value="">Select...</option>
+                  <optgroup label="Batch by time">
+                    <option
+                      v-for="w in RISK_TIME_WINDOWS"
+                      :key="w.id"
+                      :value="riskWindowValue(w.id)"
+                      :disabled="riskWindowCounts[w.id] === 0"
+                    >
+                      {{ w.label }} ({{ riskWindowCounts[w.id] }} log{{ riskWindowCounts[w.id] === 1 ? '' : 's' }})
+                    </option>
+                  </optgroup>
+                  <optgroup v-if="logs.attacks.length" label="Individual logs">
+                    <option v-for="l in logs.attacks" :key="l.path" :value="l.path">{{ l.name }}</option>
+                  </optgroup>
+                </select>
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  @click="startSecurityAssess"
+                  :disabled="!riskAssessEnabled"
+                >Assess</button>
+                <span class="help-popover-wrap">
+                  <button
+                    type="button"
+                    class="btn-icon-help help-popover-trigger"
+                    tabindex="0"
+                    aria-label="Analysis help"
+                  >?</button>
+                  <div class="help-popover" role="tooltip">
+                    <p style="margin:0 0 8px;">Choose an attack log (or a time batch of recent logs), then click <strong>Assess</strong> to score each probe result.</p>
+                    <p style="margin:0 0 8px;">The model assigns a severity (informational through critical) with short reasoning. Clear cases finish in one pass; a second assessment pass runs only when the first pass is ambiguous.</p>
+                    <p style="margin:0;">Finished reports appear in <strong>Assessment report</strong> below. You can also open older reports there without re-running Assess.</p>
+                  </div>
+                </span>
+              </div>
+              <div
+                v-if="runProgress && riskTabProgressBarVisible"
+                class="run-progress-wrap"
+              >
+                <div class="run-progress-meta">
+                  <span>{{ runProgressBarLabel }}</span>
+                  <span class="run-progress-eta">{{ runProgressEtaText }}</span>
+                </div>
+                <div class="run-progress-track">
+                  <div class="run-progress-fill" :style="{ width: (runProgress.pct || 0) + '%' }"></div>
+                </div>
+              </div>
+
+              <div v-if="riskProbeReports.length" class="run-results-history" style="margin-top:12px;">
+                <label class="run-results-history-label" for="risk-report-select">Assessment report</label>
+                <select
+                  id="risk-report-select"
+                  class="run-results-history-select"
+                  v-model="selectedRiskReportPath"
+                  @change="onSelectedRiskReportChange"
+                  :disabled="riskViewLoading"
+                >
+                  <option v-for="(report, i) in riskProbeReports" :key="report.path" :value="report.path">
+                    {{ formatRiskReportLabel(report, i) }}
+                  </option>
+                </select>
+              </div>
+
+              <div v-if="riskViewMeta" class="risk-view-meta">
+                <span v-if="riskViewMeta.playbook" class="badge badge-info">{{ riskViewMeta.playbook }}</span>
+                <span v-if="riskViewMeta.strategy" class="badge badge-neutral">{{ riskViewMeta.strategy }}</span>
+                <span v-if="riskViewMeta.timestamp" class="badge badge-neutral" style="font-family:monospace;font-size:11px;">{{ riskViewMeta.timestamp }}</span>
+                <span v-if="riskViewMeta.parentPlaybook" class="badge badge-neutral" :title="'Flagged prompts save to ' + riskViewMeta.parentPlaybook + '-flagged.json'">
+                  Flagged set: {{ riskViewMeta.parentPlaybook }}-flagged
+                </span>
+              </div>
+              <p v-if="riskFlagMsg" class="hint-inline" style="margin-top:8px;">{{ riskFlagMsg }}</p>
+
+              <div v-if="riskViewLoading && !riskViewResults.length" class="run-results-loading">Loading assessment…</div>
+              <div v-else-if="!riskViewResults.length && riskProbeReports.length && selectedRiskReportPath" class="run-results-empty">
+                No assessment rows in this report.
+              </div>
+              <div v-else-if="!riskViewLoading && !riskViewResults.length && site && component" class="run-results-empty">
+                No probe assessments yet. Run Attack with assess to see results here.
+              </div>
+            </div>
+
+            <div
+              v-if="riskViewResults.length || riskProbeReports.length"
+              class="run-results-section"
+              :class="{
+                'run-results-section--minimized': riskViewLayout === 'minimized' && riskViewResults.length,
+                'run-results-section--maximized': riskViewLayout === 'maximized' && riskViewResults.length,
+              }"
+            >
+              <div v-if="riskViewLoading && riskViewResults.length" class="run-results-loading run-results-loading--inline">Refreshing…</div>
+              <div
+                class="risk-results-panel"
+                :class="{ 'risk-results-panel--minimized': riskViewLayout === 'minimized' && riskViewResults.length }"
+              >
+                <div
+                  class="findings-metrics findings-metrics--in-panel"
+                  :class="{ 'findings-metrics--loading': riskMetricsLoading || riskWindowRowsLoading }"
+                  role="group"
+                  aria-label="Finding counts by severity"
+                >
+                  <span
+                    v-if="riskViewResults.length"
+                    class="results-panel-title"
+                  >Assessment results <span class="run-results-count">({{ riskViewResults.length }})</span></span>
+                  <template v-if="riskViewLayout !== 'minimized' || !riskViewResults.length">
+                  <label class="findings-metrics-window">
+                    <span class="findings-metrics-window-label">Window</span>
+                    <select
+                      v-model="findingsMetricsWindow"
+                      class="findings-metrics-window-select"
+                      aria-label="Metrics time window"
+                    >
+                      <option
+                        v-for="w in FINDINGS_METRICS_WINDOWS"
+                        :key="w.id"
+                        :value="w.id"
+                      >{{ w.label }}</option>
+                    </select>
+                  </label>
+                  <button
+                    v-for="l in EXPORT_RISK_LEVELS"
+                    :key="l.id"
+                    type="button"
+                    class="findings-metrics-chip"
+                    :class="{ 'findings-metrics-chip--active': isRiskLevelFilterActive(l.id) }"
+                    :aria-pressed="isRiskLevelFilterActive(l.id) ? 'true' : 'false'"
+                    :title="'Filter table by ' + l.label + ' (multi-select)'"
+                    @click="toggleRiskLevelFilter(l.id)"
+                  >
+                    <span class="risk-label" :class="'risk-' + l.id">{{ l.label }}</span>
+                    <span class="findings-metrics-count">{{ riskMetricsWindowCounts[l.id] || 0 }}</span>
+                  </button>
+                  </template>
+                  <div v-if="riskViewResults.length" class="results-layout-actions">
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="toggleRiskViewMinimize"
+                      :title="riskViewLayout === 'minimized' ? 'Expand assessment table' : 'Minimize assessment table'"
+                      :aria-label="riskViewLayout === 'minimized' ? 'Expand assessment table' : 'Minimize assessment table'"
+                      :aria-expanded="riskViewLayout !== 'minimized'"
+                    >
+                      <svg
+                        v-if="riskViewLayout === 'minimized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 6.5 8 11l5-4.5H3z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 4h10v1.5H3V4zm0 6.5h10V12H3v-1.5z"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="toggleRiskViewMaximize"
+                      :title="riskViewLayout === 'maximized' ? 'Restore default layout' : 'Maximize assessment table'"
+                      :aria-label="riskViewLayout === 'maximized' ? 'Restore default layout' : 'Maximize assessment table'"
+                    >
+                      <svg
+                        v-if="riskViewLayout === 'maximized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M5 3h8v8h-1.5V4.5H5V3zM3 5h8v8H3V5zm1.5 1.5v5h5v-5h-5z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div
+                  v-if="riskViewResults.length"
+                  v-show="riskViewLayout !== 'minimized'"
+                  class="run-results-table-wrap risk-results-table-scroll"
+                >
+                <table class="results-table run-results-table risk-view-table">
+                  <colgroup>
+                    <col class="col-row-expand">
+                    <col class="col-index">
+                    <col class="col-actions">
+                    <col class="col-risk">
+                    <col class="col-prompt">
+                    <col class="col-response">
+                    <col class="col-reasoning">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>#</th>
+                      <th class="col-actions-head">Actions</th>
+                      <th>Risk</th>
+                      <th>Prompt</th>
+                      <th>Response</th>
+                      <th>Reasoning</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="(r, i) in riskPagedResults"
+                      :key="(r.reportPath || '') + '-' + (r.id || '') + '-' + i"
+                    >
+                      <td class="row-expand-cell">
+                        <button
+                          type="button"
+                          class="btn-icon row-expand-btn"
+                          title="Expand row"
+                          aria-label="Expand row"
+                          @click.stop="openRiskRowDetail(r)"
+                        >
+                          <svg class="row-expand-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                            <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                          </svg>
+                        </button>
+                      </td>
+                      <td class="run-results-index-cell">{{ r.label }}</td>
+                      <td class="risk-actions-cell">
+                        <div class="risk-actions">
+                          <button
+                            type="button"
+                            class="risk-action-btn risk-flag-btn"
+                            :class="{ 'risk-flag-btn--active': isRiskPromptFlagged(r) }"
+                            :disabled="riskFlagBusy || riskDeleteBusy || !r.id"
+                            :title="isRiskPromptFlagged(r) ? 'Already in flagged probe set' : 'Flag for custom probe set'"
+                            :aria-label="isRiskPromptFlagged(r) ? 'Already flagged' : 'Flag prompt'"
+                            @click="flagRiskPrompt(r)"
+                          >
+                            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+                              <path
+                                fill="currentColor"
+                                d="M8 1.4l1.7 3.5 3.8.6-2.8 2.7.7 3.8L8 10.2l-3.4 1.8.7-3.8L2.5 5.5l3.8-.6L8 1.4z"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            class="risk-action-btn risk-delete-btn"
+                            :class="{ 'risk-delete-btn--armed': isRiskDeleteArmed(r) }"
+                            :disabled="riskFlagBusy || riskDeleteBusy"
+                            :title="isRiskDeleteArmed(r) ? 'Click again to confirm delete' : 'Remove this finding'"
+                            :aria-label="isRiskDeleteArmed(r) ? 'Confirm delete' : 'Drop finding'"
+                            @click="onRiskDeleteClick(r)"
+                          >
+                            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+                              <path
+                                fill="currentColor"
+                                d="M5.5 1.5h5l.5 1H14v1.5H2V2.5h3l.5-1zm-.3 3H13l-.7 9.2A1.5 1.5 0 0 1 10.8 15H5.2a1.5 1.5 0 0 1-1.5-1.3L3.2 4.5h2zm2 2v6h1.5v-6H7.2zm2.6 0v6H11v-6H9.8z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                      <td>
+                        <span :class="'risk-label risk-' + r.riskLevel">{{ r.riskLevel }}</span>
+                        <div v-if="r.confidence || r.evidenceStrength !== null" class="cfg-note" style="margin-top:4px;">
+                          <span v-if="r.confidence" :title="'Judge confidence: ' + r.confidence">conf: {{ r.confidence }}</span>
+                          <span v-if="r.evidenceStrength !== null" :title="'Deterministic evidence-strength score (0-100)'">{{ r.confidence ? ' · ' : '' }}evidence: {{ r.evidenceStrength }}</span>
+                        </div>
+                        <div v-if="r.evidenceSignals && r.evidenceSignals.length" class="cfg-note" style="margin-top:2px;" :title="'Deterministic detectors that fired'">
+                          <span v-for="s in r.evidenceSignals" :key="s" class="risk-network-badge">{{ s }}</span>
+                        </div>
+                      </td>
+                      <td
+                        class="cell-prompt cell-copyable"
+                        :class="{ 'cell-copied': riskViewCellCopied(i, 'prompt') }"
+                        title="Click to copy prompt"
+                        @click="copyRiskViewText(r.prompt, i, 'prompt')"
+                      >
+                        <span v-if="riskViewCellCopied(i, 'prompt')" class="cell-copy-badge">Copied!</span>
+                        <template v-if="expandedRiskPromptRows[i] || !r.prompt || r.prompt.length <= 160">
+                          {{ r.prompt || '-' }}
+                          <span
+                            v-if="r.prompt && r.prompt.length > 160"
+                            class="run-results-expand-hint"
+                            title="Show less"
+                            @click.stop="toggleRiskPromptRow(i)"
+                          > ▲</span>
+                        </template>
+                        <template v-else>
+                          {{ r.prompt.slice(0, 160) }}<span
+                            class="run-results-expand-hint"
+                            title="Read more"
+                            @click.stop="toggleRiskPromptRow(i)"
+                          >… ▼</span>
+                        </template>
+                      </td>
+                      <td
+                        class="cell-response cell-copyable"
+                        :class="{ 'cell-copied': riskViewCellCopied(i, 'response') }"
+                        title="Click to copy response"
+                        @click="copyRiskViewText(r.response, i, 'response')"
+                      >
+                        <span v-if="riskViewCellCopied(i, 'response')" class="cell-copy-badge">Copied!</span>
+                        <template v-if="expandedRiskRows[i] || !r.response || r.response.length <= 200">
+                          {{ r.response || '-' }}
+                          <span
+                            v-if="r.response && r.response.length > 200"
+                            class="run-results-expand-hint"
+                            title="Show less"
+                            @click.stop="toggleRiskViewRow(i)"
+                          > ▲</span>
+                        </template>
+                        <template v-else>
+                          {{ r.response.slice(0, 200) }}<span
+                            class="run-results-expand-hint"
+                            title="Read more"
+                            @click.stop="toggleRiskViewRow(i)"
+                          >… ▼</span>
+                        </template>
+                      </td>
+                      <td class="cell-reasoning">
+                        <template v-if="expandedRiskReasonRows[i] || !r.reasoning || r.reasoning.length <= 160">
+                          {{ r.reasoning || '-' }}
+                          <span
+                            v-if="r.reasoning && r.reasoning.length > 160"
+                            class="run-results-expand-hint"
+                            title="Show less"
+                            @click.stop="toggleRiskReasonRow(i)"
+                          > ▲</span>
+                        </template>
+                        <template v-else>
+                          {{ r.reasoning.slice(0, 160) }}<span
+                            class="run-results-expand-hint"
+                            title="Read more"
+                            @click.stop="toggleRiskReasonRow(i)"
+                          >… ▼</span>
+                        </template>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                </div>
+                <div
+                  v-if="riskFilteredResults.length > RISK_TABLE_PAGE_SIZE"
+                  v-show="riskViewLayout !== 'minimized'"
+                  class="risk-table-pager"
+                >
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    :disabled="riskTablePage <= 1"
+                    @click="riskTablePrevPage"
+                  >Prev</button>
+                  <span class="risk-table-pager-label">{{ riskTableRangeLabel }}</span>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    :disabled="riskTablePage >= riskTablePageCount"
+                    @click="riskTableNextPage"
+                  >Next</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>

@@ -1,0 +1,83 @@
+{
+  "probed_at": "2026-07-29T16:58:05.451057+00:00",
+  "source_mode": "connected",
+  "target_url": "https://play.lakera.ai/agent-breaker/trip_planner_phishing",
+  "transport": "ui",
+  "host": "play.lakera.ai",
+  "product_name": "Agent Breaker (trip_planner_phishing)",
+  "vendor": "Lakera",
+  "description": "An interactive AI security game/challenge where users attempt prompt injection and phishing attacks against an AI trip planner agent.",
+  "provider": "Lakera",
+  "model_hints": [
+    "gandalf"
+  ],
+  "inference_type": "agent",
+  "capabilities": [
+    "text_generation",
+    "trip_planning"
+  ],
+  "tools": [
+    {
+      "name": "Flight and Hotel Booking",
+      "type": "action",
+      "description": "Simulated tool allowing the agent to book flights and hotels on behalf of the user.",
+      "evidence": "response_ignore_substrings in config: 'Hi! I'm here to help you plan your trips and book your flights and hotels.'"
+    }
+  ],
+  "integrations": [
+    "Auth0"
+  ],
+  "api_endpoints": [
+    "https://gandalf-api.lakera.ai/api/red/app/trip_planner_phishing",
+    "https://gandalf-api.lakera.ai/api/red/app",
+    "https://gandalf-api.lakera.ai/api/session-id",
+    "https://gandalf-api.lakera.ai/api/a-b-test-decision",
+    "https://gandalf-api.lakera.ai/api/trial-assignment",
+    "https://lakera.eu.auth0.com/oauth/token"
+  ],
+  "auth_mechanisms": [
+    "oauth2",
+    "session"
+  ],
+  "tech_stack": [
+    "Auth0",
+    "HubSpot",
+    "Lottie",
+    "Google Tag Manager",
+    "React"
+  ],
+  "ui_features": [
+    "Prompt input textarea",
+    "Initiate Attack button",
+    "Markdown response container",
+    "Level selection panel",
+    "Leaderboard"
+  ],
+  "security_observations": [
+    "The application uses a backend API at gandalf-api.lakera.ai to evaluate prompt injections.",
+    "Tracking pixels from HubSpot, Dreamdata, and Google observed in network traffic."
+  ],
+  "attack_surface_notes": [
+    "Indirect prompt injection via simulated trip planning data.",
+    "Phishing simulation targeting the simulated flight/hotel booking tool."
+  ],
+  "evidence": [
+    {
+      "kind": "config",
+      "source": "submission.response_ignore_substrings",
+      "excerpt": "Hi! I'm here to help you plan your trips and book your flights and hotels."
+    },
+    {
+      "kind": "network",
+      "source": "network_urls",
+      "excerpt": "https://gandalf-api.lakera.ai/api/red/app/trip_planner_phishing"
+    }
+  ],
+  "analyst_notes": "",
+  "confirmation_status": "success",
+  "ui_capability_response": "Absolutely! Here’s a detailed 7-day Armenia adventure itinerary that blends hiking, adventure, culture, food, wine, and authentic local experiences. All information is based on official tourism sources and the most current travel blogs/websites retrieved above.\n\n7-Day Adventure Itinerary: Armenia\nLogistics & General Notes\nBest travel window: April–November (good weather for hiking and festivals)\nBase city: Yerevan (well-connected and central for day-trips/overnights)\nBring modest clothes for churches, sturdy footwear for hiking, and expect meal costs: Budget ($8–15), Mid-range ($20–35); vegetarian and halal options widely available\nDay 1: Yerevan – Arrival & Culinary Welcome\n\nMorning:\n\nArrive at Zvartnots International Airport, Yerevan. Transfer to hotel and check-in.\nLeisure stroll in city center: Republic Square, attend singing fountain show (seasonal evenings).\n\nAfternoon:\n\nFood intro: Lunch at Lavash Restaurant (Armenian specialties like dolma and khorovats).\nVisit GUM Market: Taste fresh apricots, local cheese, churchkhela (walnut/candy).\n\nEvening:\n\nOptional dinner at Dolmama (highly rated for traditional and modern Armenian cuisine).\nOvernight in Yerevan.\nDay 2: Hiking & Heritage – Garni Gorge, Geghard, & Lavash Experience\n\nMorning:\n\nEarly transfer to Garni Temple (Greco-Roman, 77 AD; Entry: 1,500 AMD).\nHike the Garni Gorge: Marvel at “Symphony of Stones” basalt columns (~1.5-2h easy hike).\nPractical: Modest dress. Bring water/snacks for hike.\n\nAfternoon:\n\nVisit Geghard Monastery (UNESCO, carved into mountain; free entry). Photograph acoustics and khachkars.\nLunch/Experience: Lavash bread baking in a nearby village home (includes meal and workshop).\n\nEvening:\n\nReturn to Yerevan (~40min drive).\nStroll Vernissage Market (traditional crafts, local sweets).\nOvernight in Yerevan.\nDay 3: South Armenia – Adventure & Monasteries (Khor Virap & Noravank)\n\nMorning:\n\nDepart to Khor Virap Monastery (Mt. Ararat views, historic prison site; 30km from Yerevan).\nHike short trails around the monastery for panoramic photos.\n\nAfternoon:\n\nContinue to Noravank Monastery (dramatic red rock canyon, unique two-story Surb Astvatsatsin church).\nStop for lunch: Try khorovats (Armenian BBQ) at a local guesthouse.\nVisit Areni region: Explore cave winery archaeological site and Areni Wine Factory (wine tasting of Areni Noir).\n\nEvening:\n\nDinner at a village guesthouse, optional home-cooked meal or wine-country restaurant.\nOvernight in or near Areni (guesthouse or small hotel – rural Armenia experience).\nDay 4: Tatev Monastery & The Wings of Tatev (Adventure Day)\n\nMorning:\n\nEarly drive to Halidzor (for Tatev cable car; ~2 hrs from Areni).\nRide the Wings of Tatev – world’s longest reversible cable car (5.7km; 5,000 AMD return).\nVisit Tatev Monastery (medieval university, spectacular clifftop views).\n\nAfternoon:\n\nOptional nearby hikes along the Vorotan River gorge.\nLunch: Try harissa at a local restaurant (ancient wheat & meat dish).\n\nEvening:\n\nReturn towards Yerevan (stop midway for dinner), or overnight in Goris for added adventure (visit Old Goris for traditional meal at Mirhav Restaurant).\nDay 5: Vayots Dzor Wine Touring & Outdoor Exploration\n\nMorning:\n\nGuided wine tour through Vayots Dzor Province (visit Zorah, Kataro, Voskevaz, with tasting and cave cellars).\nWalking between some vineyards (light hiking option available).\n\nAfternoon:\n\nLunch at Trinity Canyon Vineyards or similar.\nOptional: Village experience or cheese-making in Areni.\nReturn to Yerevan by evening.\n\nEvening:\n\nDinner at Pandok Yerevan (try khash if available; typical winter specialty).\nDay 6: Lake Sevan & Dilijan National Park (Nature & Relaxation)\n\nMorning:\n\nDay trip to Lake Sevan (Armenia’s largest lake).\nVisit Sevanavank Monastery; hike the peninsula or along the shoreline.\n\nAfternoon:\n\nContinue to Dilijan National Park (called \"Armenian Switzerland\") for light hiking on the Parz Lake trail, or just enjoy lakefront cafés.\nLunch: Haykanoush Restaurant (try trout or local vegetarian ",
+  "har_path": "",
+  "network_log_path": "",
+  "grounding_passed": true,
+  "judge_reasoning": "Merged using headed expert as primary source per priority rules; supplemented api_endpoints and tech_stack from observed_network_urls and headless where they directly matched probe data. Filtered integrations to Auth0 only (tracking pixels like HubSpot moved to security_observations). All tools, endpoints, and capabilities have traceable evidence from config excerpts or network_urls; inference_type normalized to 'agent' to fit schema."
+}

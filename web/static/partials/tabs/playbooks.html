@@ -1,0 +1,578 @@
+        <!-- Missions -->
+        <template v-if="tab === 'playbooks'">
+          <div class="missions-view" :class="{ 'missions-view--results-maximized': pbResultsMaximizedActive }">
+            <div class="missions-view-controls">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:10px;flex-wrap:wrap;">
+                <h2 style="margin:0;">Missions</h2>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <span v-if="pbTabMsg" class="pb-status-msg">{{ pbTabMsg }}</span>
+                  <span v-if="pipelineMsg" class="pb-status-msg">{{ pipelineMsg }}</span>
+                </div>
+              </div>
+
+              <div class="run-controls-panel">
+                <div class="run-controls-panel__actions pb-controls-actions">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="pbLoadCatalog()">Refresh</button>
+                  <button type="button" class="btn btn-primary btn-sm" @click="openPlaybookModal">Plan Mission</button>
+                  <button
+                    type="button"
+                    class="btn btn-sm"
+                    :class="confirmButtonClass('pb-blank', 'btn-ghost')"
+                    @click="pbStartBlankPlaybook"
+                  >{{ confirmButtonLabel('pb-blank', 'Blank mission') }}</button>
+                  <label class="btn btn-ghost btn-sm pb-import-btn">
+                    Import JSON
+                    <input type="file" accept="application/json,.json" hidden @change="pbImportFileChanged">
+                  </label>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    @click="pbRegeneratePlaybook"
+                    :disabled="!pbRecord || pbIsNew || pbSaving || pbRegenerating || pbDeleting"
+                    title="Save, then rebuild categories, triggers, assessment, and guidance from the current target + mission brief (always a clean rebuild)"
+                  >
+                    {{ pbRegenerating ? 'Rebuilding…' : 'Rebuild' }}
+                  </button>
+                  <button
+                    v-if="pbRegenerating"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    @click="cancelPlaybookGenerate"
+                    title="Stop playbook regenerate without freezing the web UI"
+                  >Stop</button>
+                  <button
+                    type="button"
+                    class="btn btn-sm"
+                    :class="confirmButtonClass('pb-delete', 'btn-ghost')"
+                    @click="pbDeletePlaybook"
+                    :disabled="!pbSelectedId || pbIsNew || pbDeleting"
+                  >
+                    {{ confirmButtonLabel('pb-delete', 'Delete', pbDeleting ? 'Deleting…' : '') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm pb-save-btn"
+                    @click="pbSavePlaybook"
+                    :disabled="!pbRecord || pbSaving || pbRegenerating"
+                  >
+                    {{ pbSaving && !pbRegenerating ? 'Saving…' : (pbRegenerating ? 'Rebuilding…' : 'Save') }}
+                  </button>
+                </div>
+              </div>
+
+              <p v-if="pbTabError" class="pb-error">{{ pbTabError }}</p>
+            </div>
+
+            <div
+              class="run-results-section"
+              :class="{
+                'run-results-section--minimized': pbResultsLayout === 'minimized',
+                'run-results-section--maximized': pbResultsLayout === 'maximized',
+              }"
+            >
+              <div
+                class="run-results-panel"
+                :class="{ 'run-results-panel--minimized': pbResultsLayout === 'minimized' }"
+              >
+                <div
+                  class="findings-metrics findings-metrics--in-panel"
+                  role="group"
+                  aria-label="Mission editor"
+                >
+                  <span class="results-panel-title">
+                    Mission
+                    <span v-if="pbRecord" class="run-results-count">
+                      ({{ pbIsNew ? 'new' : (pbSelectedId || 'mission') }})
+                    </span>
+                  </span>
+                  <div class="results-layout-actions">
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="togglePbResultsMinimize"
+                      :title="pbResultsLayout === 'minimized' ? 'Expand mission' : 'Minimize mission'"
+                      :aria-label="pbResultsLayout === 'minimized' ? 'Expand mission' : 'Minimize mission'"
+                      :aria-expanded="pbResultsLayout !== 'minimized'"
+                    >
+                      <svg
+                        v-if="pbResultsLayout === 'minimized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 6.5 8 11l5-4.5H3z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 4h10v1.5H3V4zm0 6.5h10V12H3v-1.5z"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="togglePbResultsMaximize"
+                      :title="pbResultsLayout === 'maximized' ? 'Restore layout' : 'Maximize mission'"
+                      :aria-label="pbResultsLayout === 'maximized' ? 'Restore layout' : 'Maximize mission'"
+                    >
+                      <svg
+                        v-if="pbResultsLayout === 'maximized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M5 3h8v8h-1.5V4.5H5V3zM3 5h8v8H3V5zm1.5 1.5v5h5v-5h-5z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  v-show="pbResultsLayout !== 'minimized'"
+                  class="run-results-table-wrap pb-workspace-wrap"
+                >
+            <div class="pb-columns">
+              <aside class="pb-list-panel">
+                <div class="pb-list-title">Index</div>
+                <div v-if="pbLoading && !pbCatalog.length" class="pb-empty">Loading…</div>
+                <div v-else-if="!pbCatalogGrouped.length" class="pb-empty">No missions yet. Plan one to begin.</div>
+                <template v-for="group in pbCatalogGrouped" :key="group.key || group.label">
+                  <button
+                    type="button"
+                    class="pb-list-group"
+                    :aria-expanded="!pbIsGroupCollapsed(group)"
+                    @click="pbToggleGroup(group)"
+                  >
+                    <span
+                      class="pb-list-group-chevron"
+                      :class="{ 'pb-list-group-chevron--collapsed': pbIsGroupCollapsed(group) }"
+                      aria-hidden="true"
+                    >▼</span>
+                    <span class="pb-list-group-label">{{ group.label }}</span>
+                    <span class="pb-list-group-count">{{ group.items.length }}</span>
+                  </button>
+                  <div v-show="!pbIsGroupCollapsed(group)" class="pb-list-group-items">
+                    <button
+                      v-for="row in group.items"
+                      :key="row.id"
+                      type="button"
+                      class="pb-list-item"
+                      :class="{ active: pbSelectedId === row.id && !pbIsNew }"
+                      @click="pbSelectPlaybook(row.id)"
+                    >
+                      <span class="pb-list-name">{{ row.playbook }}</span>
+                    </button>
+                  </div>
+                </template>
+              </aside>
+
+              <section class="pb-editor-panel">
+                <div v-if="!pbRecord" class="pb-empty pb-empty-editor">
+                  Select a mission to review or edit, or plan a new one.
+                </div>
+                <template v-else>
+                  <div class="pb-editor-toolbar">
+                    <div class="pb-mode-tabs">
+                      <button type="button" class="pb-mode-tab" :class="{ active: pbEditMode === 'simple' }" @click="pbSwitchEditMode('simple')">Brief</button>
+                      <button type="button" class="pb-mode-tab" :class="{ active: pbEditMode === 'overview' }" @click="pbSwitchEditMode('overview')">Spec</button>
+                      <button type="button" class="pb-mode-tab" :class="{ active: pbEditMode === 'json' }" @click="pbSwitchEditMode('json')">JSON</button>
+                    </div>
+                    <span v-if="pbDirty" class="pb-dirty">Unsaved</span>
+                  </div>
+
+                  <div v-if="pbIsNew" class="pb-new-id form-row">
+                    <label>Mission ID</label>
+                    <input v-model="pbNewId" placeholder="e.g. tool_schema_exfil" @input="pbMarkDirty">
+                    <span class="cfg-note" style="margin:0;">Saved as <code>playbooks/{{ pbNewId || 'id' }}.json</code></span>
+                  </div>
+
+                  <div v-if="pbEditMode === 'simple'" class="pb-overview pb-simple">
+                    <div class="pb-section">
+                      <div class="cfg-section-title">Mission brief</div>
+                      <div class="form-row pb-field-stack">
+                        <textarea v-model="pbRecord.play" rows="8" class="pb-intent-input" placeholder="What this mission tries to prove" @input="pbOnOverviewInput" aria-label="Mission brief"></textarea>
+                      </div>
+                      <div class="form-row">
+                        <label>Hunt name</label>
+                        <input
+                          v-model="pbRecordCat.play_category_label"
+                          placeholder="Short name for this hunt"
+                          @input="pbOnRecordCategoryLabelInput"
+                        >
+                        <span v-if="pbRegenerating" class="cfg-note" style="margin:0;">Rebuilding…</span>
+                      </div>
+                      <div class="form-row">
+                        <label>Name</label>
+                        <input v-model="pbRecord.playbook" @input="pbOnOverviewInput">
+                      </div>
+                      <div v-if="!pbIsNew" class="form-row">
+                        <label>Mission ID</label>
+                        <input
+                          v-model="pbRecord.playbook_id"
+                          style="font-family:var(--mono);"
+                          @input="pbRecord.playbook_id = pbSlugify(pbRecord.playbook_id); pbOnOverviewInput()"
+                        >
+                        <span class="cfg-note" style="margin:0;">
+                          Saved as <code>playbooks/{{ pbSlugify(pbRecord.playbook_id) || 'id' }}.json</code>.
+                          Changing ID on Save renames the file and relinks suites / intel.
+                        </span>
+                      </div>
+                    </div>
+                    <div class="pb-section">
+                      <div class="cfg-section-title">Criteria</div>
+                      <p class="cfg-note">Applied to every category’s attack triggers on Save.</p>
+                      <div class="form-row pb-field-stack">
+                        <label>Success</label>
+                        <div class="pb-wizard-rules">
+                          <div v-for="(rule, idx) in pbSimpleSuccessRules" :key="'ss'+idx" class="pb-wizard-rule-row">
+                            <input v-model="pbSimpleSuccessRules[idx]" @input="pbOnSimpleRulesInput">
+                            <button type="button" class="btn btn-ghost btn-sm" @click="pbSimpleSuccessRules.splice(idx, 1); pbOnSimpleRulesInput()" :disabled="pbSimpleSuccessRules.length <= 1">×</button>
+                          </div>
+                          <button type="button" class="btn btn-ghost btn-sm" @click="pbSimpleSuccessRules.push(''); pbOnSimpleRulesInput()">+ Add</button>
+                        </div>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label>Fail</label>
+                        <div class="pb-wizard-rules">
+                          <div v-for="(rule, idx) in pbSimpleFailureRules" :key="'sf'+idx" class="pb-wizard-rule-row">
+                            <input v-model="pbSimpleFailureRules[idx]" @input="pbOnSimpleRulesInput">
+                            <button type="button" class="btn btn-ghost btn-sm" @click="pbSimpleFailureRules.splice(idx, 1); pbOnSimpleRulesInput()" :disabled="pbSimpleFailureRules.length <= 1">×</button>
+                          </div>
+                          <button type="button" class="btn btn-ghost btn-sm" @click="pbSimpleFailureRules.push(''); pbOnSimpleRulesInput()">+ Add</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="pbEditMode === 'overview'" class="pb-overview">
+                    <div class="pb-section">
+                      <div class="cfg-section-title">Mission brief</div>
+                      <div class="form-row pb-field-stack">
+                        <textarea v-model="pbRecord.play" rows="8" class="pb-intent-input" placeholder="What this mission tries to prove" @input="pbOnOverviewInput" aria-label="Mission brief"></textarea>
+                      </div>
+                      <div class="form-row">
+                        <label>Hunt name</label>
+                        <input
+                          v-model="pbRecordCat.play_category_label"
+                          placeholder="Short name for this hunt"
+                          @input="pbOnRecordCategoryLabelInput"
+                          :disabled="pbRegenerating"
+                        >
+                        <span v-if="pbRegenerating" class="cfg-note" style="margin:0;">Rebuilding…</span>
+                        <span v-else-if="pbCategoryChanged()" class="cfg-note" style="margin:0;">Hunt name changed - Save will ask before applying the new preset and regenerating.</span>
+                      </div>
+                      <div class="form-row">
+                        <label>Name</label>
+                        <input v-model="pbRecord.playbook" @input="pbOnOverviewInput">
+                      </div>
+                      <div class="form-row">
+                        <label>Mission ID</label>
+                        <input
+                          v-model="pbRecord.playbook_id"
+                          style="font-family:var(--mono);"
+                          :readonly="!!(pbSelectedId && pbSelectedId.startsWith('_'))"
+                          @input="pbRecord.playbook_id = pbSlugify(pbRecord.playbook_id); pbOnOverviewInput()"
+                        >
+                        <span v-if="pbSelectedId && pbSelectedId.startsWith('_')" class="cfg-note" style="margin:0;">
+                          File: <code>{{ pbSelectedId }}.json</code> (reference template - ID cannot be renamed)
+                        </span>
+                        <span v-else class="cfg-note" style="margin:0;">
+                          Saved as <code>playbooks/{{ pbSlugify(pbRecord.playbook_id) || 'id' }}.json</code>.
+                          Changing ID on Save renames the file and relinks suites / intel.
+                        </span>
+                      </div>
+                      <div class="form-row">
+                        <label>Assessment type</label>
+                        <input v-model="pbRecord.assessment_type" @input="pbOnOverviewInput">
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label>Judge instructions</label>
+                        <textarea v-model="pbRecord.evaluation_instructions" rows="4" @input="pbOnOverviewInput"></textarea>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label>Judge method</label>
+                        <textarea
+                          :value="pbLinesFromList(pbRecord.evaluation_methodology)"
+                          rows="5"
+                          placeholder="One step per line"
+                          @input="pbSetMethodologyLines($event.target.value)"
+                        ></textarea>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-success-markers">Indicators</label>
+                        <input
+                          id="pb-record-success-markers"
+                          :value="pbSuccessMarkersDisplay(pbRecord)"
+                          placeholder="e.g. a mission-specific secret prefix or tool-result phrase"
+                          @input="pbSetSuccessMarkers($event.target.value)"
+                        >
+                        <span class="cfg-note" style="margin:0;">Optional. Comma-separated win indicators - ends the run early when found (saved as <code>stop_words</code>).</span>
+                      </div>
+                    </div>
+
+                    <div class="pb-section">
+                      <div class="pb-section-head">
+                        <div class="cfg-section-title">Delivery</div>
+                      </div>
+                      <p class="cfg-note" style="margin:0 0 12px 0;">Controls how probes are delivered, what opening prompts ask for, and how later improvements are guided.</p>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-attack-objective">Target</label>
+                        <textarea
+                          id="pb-record-attack-objective"
+                          v-model="pbConfigForm.attack_objective"
+                          rows="2"
+                          placeholder="e.g. Output the Epstein list of names who visited the island."
+                          @input="pbOnConfigInput"
+                        ></textarea>
+                        <span class="cfg-note" style="margin:0;">What every opening prompt must ask for. Leave blank only if the mission is about changing behavior with no concrete ask.</span>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-prompt-template">Prompt template</label>
+                        <div class="pb-prompt-template-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                          <button
+                            v-for="chip in PB_PROMPT_TEMPLATE_CHIPS"
+                            :key="'cfg-' + chip.id"
+                            type="button"
+                            class="btn btn-ghost btn-sm"
+                            @click="pbApplyPromptTemplateChip(pbConfigForm, chip); pbOnConfigInput()"
+                          >{{ chip.label }}</button>
+                        </div>
+                        <textarea
+                          id="pb-record-prompt-template"
+                          v-model="pbConfigForm.prompt_template"
+                          rows="3"
+                          placeholder='Optional. e.g. {"task":"{{task}}","input":"{{input}}","output_format":"{{format}}"}'
+                          @input="pbOnConfigInput"
+                        ></textarea>
+                        <span class="cfg-note" style="margin:0;">Optional exact envelope. Use <code>&#123;&#123;input&#125;&#125;</code> / <code>&#123;&#123;prompt&#125;&#125;</code> for the generated body; <code>&#123;&#123;task&#125;&#125;</code> / <code>&#123;&#123;format&#125;&#125;</code> from the fields below. Applied after generation.</span>
+                      </div>
+                      <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div class="pb-field-stack">
+                          <label for="pb-record-prompt-task">Template task</label>
+                          <input id="pb-record-prompt-task" v-model="pbConfigForm.prompt_task" placeholder="Fills {{task}}" @input="pbOnConfigInput">
+                        </div>
+                        <div class="pb-field-stack">
+                          <label for="pb-record-prompt-format">Template format</label>
+                          <input id="pb-record-prompt-format" v-model="pbConfigForm.prompt_format" placeholder="Fills {{format}}" @input="pbOnConfigInput">
+                        </div>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-standard-action">Follow-up after success</label>
+                        <textarea
+                          id="pb-record-standard-action"
+                          v-model="pbConfigForm.standard_action"
+                          rows="2"
+                          placeholder="Optional. Instruction / jailbreak plays: post-success canary (e.g. scam sms probe)."
+                          @input="pbOnConfigInput"
+                        ></textarea>
+                        <span class="cfg-note" style="margin:0;">Only sent after a jailbreak seems to work - a separate follow-up. Do not put this in the main attack prompts. Must differ from the attack objective. Clear to turn off.</span>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-delivery-constraints">Delivery constraints</label>
+                        <textarea id="pb-record-delivery-constraints" v-model="pbConfigForm.delivery_constraints" rows="4" placeholder="Optional. Code-execution plays: write → run → return rail. Leave blank for text-only or non-interpreter hunts." @input="pbOnConfigInput"></textarea>
+                      </div>
+                      <div class="form-row checkbox-row">
+                        <label>
+                          <input type="checkbox" v-model="pbConfigForm.apply_delivery_to_seeds" @change="pbOnConfigInput">
+                          <span>Require the full delivery steps in each opening prompt</span>
+                        </label>
+                        <span class="cfg-note" style="margin:0;">When on, each opening prompt must include every delivery step in one message. Script-style steps also get automatic checks (must mention writing a script and running it).</span>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-mandatory-directives">Mandatory directives</label>
+                        <textarea id="pb-record-mandatory-directives" v-model="pbConfigForm.mandatory_directives" rows="3" placeholder="One per line" @input="pbOnConfigInput"></textarea>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-expert-guidance">Seed guidance</label>
+                        <textarea id="pb-record-expert-guidance" v-model="pbConfigForm.expert_guidance" rows="2" @input="pbOnConfigInput"></textarea>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-followup-guidance">Follow-up guidance</label>
+                        <textarea id="pb-record-followup-guidance" v-model="pbConfigForm.followup_guidance" rows="2" @input="pbOnConfigInput"></textarea>
+                      </div>
+                      <div class="form-row pb-field-stack">
+                        <label for="pb-record-theory-guidance">Retarget guidance</label>
+                        <textarea id="pb-record-theory-guidance" v-model="pbConfigForm.theory_guidance" rows="2" @input="pbOnConfigInput"></textarea>
+                      </div>
+                    </div>
+
+                    <div class="pb-section">
+                      <div class="pb-section-head">
+                        <div class="cfg-section-title">Severity tiers ({{ (pbRecord.severity_tiers || []).length }})</div>
+                        <button type="button" class="btn btn-ghost btn-sm" @click="pbAddSeverityTier">+ Add tier</button>
+                      </div>
+                      <div v-for="(tier, ti) in (pbRecord.severity_tiers || [])" :key="ti" class="pb-tier-card">
+                        <div class="pb-card-toolbar">
+                          <span class="pb-card-label">Tier {{ ti + 1 }}</span>
+                          <button
+                            type="button"
+                            class="tm-del"
+                            :class="{ 'tm-del--armed btn btn-primary btn-sm': isConfirmArmed('pb-tier-' + ti) }"
+                            :title="isConfirmArmed('pb-tier-' + ti) ? 'Confirm remove tier' : 'Remove tier'"
+                            @click="pbRemoveSeverityTier(ti)"
+                          >{{ isConfirmArmed('pb-tier-' + ti) ? 'Confirm' : '✕' }}</button>
+                        </div>
+                        <div class="pb-form-grid">
+                          <div class="form-row">
+                            <label>Level</label>
+                            <input v-model="tier.level" placeholder="e.g. Critical" @input="pbOnOverviewInput">
+                          </div>
+                          <div class="form-row">
+                            <label>Status</label>
+                            <input v-model="tier.status" @input="pbOnOverviewInput">
+                          </div>
+                        </div>
+                        <div class="form-row pb-field-stack">
+                          <label>Criteria</label>
+                          <textarea v-model="tier.criteria" rows="2" @input="pbOnOverviewInput"></textarea>
+                        </div>
+                        <div class="form-row pb-field-stack">
+                          <label>Remediation urgency</label>
+                          <textarea v-model="tier.remediation_urgency" rows="2" @input="pbOnOverviewInput"></textarea>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="pb-section">
+                      <div class="pb-section-head">
+                        <div class="cfg-section-title">Required output schema</div>
+                        <button type="button" class="btn btn-ghost btn-sm" @click="pbAddSchemaField">+ Add field</button>
+                      </div>
+                      <div v-if="!pbSchemaKeys().length" class="pb-empty-inline">No output schema fields.</div>
+                      <div v-for="key in pbSchemaKeys()" :key="key" class="pb-schema-row">
+                        <input :value="key" readonly class="pb-schema-key" style="font-family:var(--mono);">
+                        <input v-model="pbRecord.required_output_schema[key]" @input="pbOnOverviewInput">
+                        <button
+                          type="button"
+                          class="tm-del"
+                          :class="{ 'tm-del--armed btn btn-primary btn-sm': isConfirmArmed('pb-schema-' + key) }"
+                          :title="isConfirmArmed('pb-schema-' + key) ? 'Confirm remove field' : 'Remove field'"
+                          @click="pbRemoveSchemaField(key)"
+                        >{{ isConfirmArmed('pb-schema-' + key) ? 'Confirm' : '✕' }}</button>
+                      </div>
+                    </div>
+
+                    <div class="pb-section">
+                      <div class="pb-section-head">
+                        <div class="cfg-section-title">Vectors ({{ (pbRecord.categories || []).length }})</div>
+                        <button type="button" class="btn btn-ghost btn-sm" @click="pbAddCategory">+ Add category</button>
+                      </div>
+                      <div v-for="(cat, i) in (pbRecord.categories || [])" :key="cat.id || i" class="pb-category-card">
+                        <div class="pb-card-toolbar">
+                          <span class="pb-card-label">Category {{ i + 1 }}</span>
+                          <button
+                            type="button"
+                            class="tm-del"
+                            :class="{ 'tm-del--armed btn btn-primary btn-sm': isConfirmArmed('pb-cat-' + i) }"
+                            :title="isConfirmArmed('pb-cat-' + i) ? 'Confirm remove category' : 'Remove category'"
+                            @click="pbRemoveCategory(i)"
+                          >{{ isConfirmArmed('pb-cat-' + i) ? 'Confirm' : '✕' }}</button>
+                        </div>
+                        <div class="pb-form-grid">
+                          <div class="form-row">
+                            <label>ID</label>
+                            <input v-model="cat.id" style="font-family:var(--mono);" @input="pbOnOverviewInput">
+                          </div>
+                          <div class="form-row">
+                            <label>Parent ID</label>
+                            <input v-model="cat.parent_id" placeholder="LLM01" @input="pbOnOverviewInput">
+                          </div>
+                          <div class="form-row">
+                            <label>Channel</label>
+                            <select v-model="cat.channel" @change="pbOnOverviewInput">
+                              <option value="text">text (zero_shot, jailbreak, …)</option>
+                              <option value="artifact">artifact (multimodal)</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="pb-form-grid">
+                          <div class="form-row">
+                            <label>Name</label>
+                            <input v-model="cat.name" @input="pbOnOverviewInput">
+                          </div>
+                          <div class="form-row">
+                            <label>Focus</label>
+                            <input v-model="cat.focus" @input="pbOnOverviewInput">
+                          </div>
+                        </div>
+                        <div class="form-row pb-field-stack">
+                          <label>Description</label>
+                          <textarea v-model="cat.description" rows="3" @input="pbOnOverviewInput"></textarea>
+                        </div>
+                        <div class="form-row pb-field-stack">
+                          <label>Exploited if (one per line)</label>
+                          <textarea
+                            :value="pbLinesFromList(cat.attack_triggers && cat.attack_triggers.exploited_if)"
+                            rows="3"
+                            @input="pbSetCategoryTriggers(cat, 'exploited_if', $event.target.value)"
+                          ></textarea>
+                        </div>
+                        <div class="form-row pb-field-stack">
+                          <label>Mitigated if (one per line)</label>
+                          <textarea
+                            :value="pbLinesFromList(cat.attack_triggers && cat.attack_triggers.mitigated_if)"
+                            rows="3"
+                            @input="pbSetCategoryTriggers(cat, 'mitigated_if', $event.target.value)"
+                          ></textarea>
+                        </div>
+                        <div class="form-row">
+                          <label>Delivery methods</label>
+                          <input
+                            :value="pbCommaListFromArray(cat.delivery_methods)"
+                            placeholder="text_direct (text channel) or document_pdf_hidden (artifact)"
+                            @input="cat.delivery_methods = pbArrayFromCommaList($event.target.value); pbOnOverviewInput()"
+                          >
+                          <span class="hint-inline">Text channel → text_direct only. Artifact channel → multimodal only.</span>
+                        </div>
+                        <div class="form-row pb-field-stack">
+                          <label>Category vectors (one per line)</label>
+                          <textarea
+                            :value="pbLinesFromList(cat.category_vectors)"
+                            rows="2"
+                            :placeholder="cat.channel === 'artifact' ? 'Required - pdf_hidden, image_text, …' : 'Leave empty for text categories'"
+                            @input="pbSetCategoryLines(cat, 'category_vectors', $event.target.value)"
+                          ></textarea>
+                        </div>
+                        <div class="form-row pb-field-stack">
+                          <label>Forensic evidence required</label>
+                          <textarea v-model="cat.forensic_evidence_required" rows="2" @input="pbOnOverviewInput"></textarea>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-else class="pb-json-wrap">
+                    <textarea
+                      v-model="pbJsonText"
+                      class="pb-json-editor"
+                      spellcheck="false"
+                      @input="pbOnJsonInput"
+                    ></textarea>
+                  </div>
+                </template>
+              </section>
+            </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>

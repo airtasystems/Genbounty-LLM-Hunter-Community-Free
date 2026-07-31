@@ -1,0 +1,19 @@
+  <!-- Run troubleshooting modal -->
+  <div v-if="showRunTroubleshoot" class="modal-backdrop" @click.self="showRunTroubleshoot = false">
+    <div class="modal modal-wide">
+      <div class="modal-sub" style="margin-bottom:12px;">Attack Troubleshooting</div>
+      <div class="modal-help">
+        <p><strong>Start with a manual sample fire.</strong> Use <strong>Operations → Firing Range</strong> to send one prompt to the in-scope target and confirm selectors, auth, response capture, status, and timing before running a full suite.</p>
+        <p><strong>Try Human mode.</strong> In Settings -> Browser, set Fetch Method to <code>human</code> for targets that block pooled or clustered browsers.</p>
+        <p><strong>Disable headless.</strong> In Settings -> Browser, turn off Headless so you can watch the browser fill the prompt, click submit, and wait for the response.</p>
+        <p><strong>Increase timeout.</strong> In Settings -> Component, raise Response wait (ms), especially for slow model responses or streaming UIs.</p>
+        <p><strong>Check selectors.</strong> Re-run Connect Target -> Start Discovery if the prompt box, send button, or response container changed. Prefer stable selectors such as <code>#prompt-textarea</code>, <code>button[data-testid="send-button"]</code>, and <code>div[data-message-author-role="assistant"]</code>.</p>
+        <p><strong>Refresh auth.</strong> If the page opens logged out or gets redirected, run Add Login again for the site.</p>
+        <p><strong>Reduce concurrency.</strong> If you see rate limits or flaky responses, lower pool/cluster sizes or switch to Human mode before running larger suites.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" @click="showRunTroubleshoot = false">Close</button>
+      </div>
+    </div>
+  </div>
+

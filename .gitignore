@@ -1,0 +1,66 @@
+# Cursor IDE (local agent rules / project state)
+.cursor/
+
+# Environment and secrets (anywhere)
+.env
+**/.env
+
+# Python bytecode and caches (anywhere)
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Cache directories (anywhere)
+cache/
+**/cache/
+.cache/
+**/.cache/
+
+# risk level agent
+dev/
+genbounty-venv/
+airta-venv/
+simple-agent/ 
+risk-level-agent/logs/
+
+# Pipeline reports
+reports/
+
+# Generated multimodal payloads
+payloads/generate/
+
+# Live Run Tests browser screenshots (runtime only)
+web/tmp/
+
+# Playwright persistent browser profile (cookies, login data)
+browser-bot/browser_profile/
+
+# Per-target runtime / secrets under sites/ (config.yaml + recon.json are tracked)
+browser-bot/sites/**/.login_profile/
+browser-bot/sites/**/intel/
+browser-bot/sites/**/logs/
+browser-bot/sites/**/nuke_backups/
+browser-bot/sites/**/tests/
+browser-bot/sites/**/strategy_handoff/
+browser-bot/sites/**/enhance_theory.json
+browser-bot/sites/**/enhance_theory_history.json
+# auth.json / storage_state.json covered by patterns below
+
+# Generated / learned test corpus (local only)
+generate-tests/corpus/
+
+# Per-target auth/session state (anywhere outside ignored trees)
+**/auth.json
+**/storage_state.json
+
+# component discovery
+# Per-site state (site_config/) and per-component state (localhost3000/<component>/)
+**/site_config/
+**/auth_state.json
+**/csrf_token.json
+**/discovered_endpoint.json
+**/discovered_refresh_url.txt
+**/last_refresh.txt

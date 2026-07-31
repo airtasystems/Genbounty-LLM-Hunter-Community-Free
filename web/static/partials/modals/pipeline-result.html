@@ -1,0 +1,45 @@
+  <!-- Start Battle: no findings / try again -->
+  <div v-if="showPipelineResultModal" class="modal-backdrop" @click.self="closePipelineResultModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pipeline-result-title">
+      <div class="modal-sub">Start Battle</div>
+      <h2 id="pipeline-result-title" class="modal-title" style="margin-top:0;">{{ pipelineResultTitle }}</h2>
+      <div class="modal-help">
+        <p>{{ pipelineResultBody }}</p>
+        <div class="form-row" style="margin-top:1rem;">
+          <label class="checkbox-row" style="gap:8px;">
+            <input type="radio" value="again" v-model="pipelineModalMode">
+            <span>{{ pipelineResultReason === 'all_strategies_exhausted' || pipelineAllMode
+              ? 'Run again (all in-scope strategies)'
+              : 'Run again (same strategy)' }}</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="checkbox-row" style="gap:8px;">
+            <input type="radio" value="different" v-model="pipelineModalMode">
+            <span>Try a different strategy</span>
+          </label>
+        </div>
+        <div v-if="pipelineModalMode === 'different'" class="form-row" style="margin-top:8px;">
+          <label for="pipeline-modal-strategy">Strategy</label>
+          <select id="pipeline-modal-strategy" v-model="pipelineModalStrategy">
+            <option
+              v-for="s in pipelineStrategyOptions"
+              :key="s"
+              :value="s"
+            >{{ pretty(s) }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="closePipelineResultModal">Close</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          @click="pipelineModalMode === 'different' ? pipelineTryDifferentStrategy() : pipelineRunAgain()"
+          :disabled="pipelineBusy || (pipelineModalMode === 'different' && !pipelineModalStrategy)"
+        >
+          {{ pipelineModalMode === 'different' ? 'Run with strategy' : 'Run again' }}
+        </button>
+      </div>
+    </div>
+  </div>

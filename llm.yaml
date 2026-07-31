@@ -1,0 +1,104 @@
+# Assistant LLM role assignment (multi-provider layer: pipeline/llm).
+#
+# Maps each logical role to a profile -> {provider, model}. API keys live in
+# .env only (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY,
+# OPENROUTER_API_KEY); never put keys here. A key is required only for a
+# provider actually assigned to a role below, and is checked at call time
+# (never at import).
+#
+# OpenRouter is a convenience router, not a lock-in. Native openai / anthropic /
+# gemini / grok adapters and keys remain first-class: switch any profile back by
+# changing { provider, model } only (see llm.yaml.example).
+#
+# Shipped layout (max-critical hybrid):
+#   - OpenRouter Grok 4.3 -> offensive_generator / offensive_fast / offensive_critic
+#       + enhance_theory (Step 1 speed on Auto-run / pipeline)
+#   - OpenRouter Hermes 70B  -> refusal_fallback
+#   - Native OpenAI GPT      -> offensive_editor (generation_judge only)
+#   - OpenRouter Hy3         -> grounder (evidence grounding)
+#   - Native Anthropic       -> triager + methodologist (Sonnet)
+#       (playbook_author / recon_consolidate)
+#   - Native Gemini          -> operator (recon/discovery; server-side cache)
+#
+# OpenRouter slugs verified 2026-07-27:
+#   nousresearch/hermes-4-70b
+#   x-ai/grok-4.3   (replaces deprecated x-ai/grok-4-fast)
+#   tencent/hy3
+# (Editor stays native OpenAI; triager/methodologist native Anthropic.)
+#
+# Needs keys: OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY.
+# GROK_API_KEY not required while Grok roles use OpenRouter.
+#
+# Scope: assistant LLMs only (generation, assessment, discovery, etc.). This does
+# NOT configure the target LLM under test (Connect Target / api_presets.py).
+
+llm:
+  profiles:
+    # Offensive prompt generation - Grok 4.3 via OpenRouter.
+    offensive_generator: { provider: openrouter, model: x-ai/grok-4.3 }
+    # Cheaper Hermes 70B for content-policy refusal retries (same family).
+    offensive_fallback: { provider: openrouter, model: nousresearch/hermes-4-70b }
+    # High-volume offensive rewriting / adaptive follow-ups - Grok via OpenRouter.
+    offensive_fast: { provider: openrouter, model: x-ai/grok-4.3 }
+    # Attack judge / editor - native OpenAI (generation_judge only).
+    offensive_editor: { provider: openrouter, model: x-ai/grok-4.3 }
+    # Target-aware preflight critique - Grok via OpenRouter (keeps Sol off the hot path).
+    offensive_critic: { provider: openrouter, model: x-ai/grok-4.3 }
+    # Harm / risk assessment (triage) - native Anthropic sonnet.
+    triager: { provider: gemini, model: gemini-3.5-flash }
+    # Methodology (playbooks, enhancement theory) - native Anthropic sonnet.
+    methodologist: { provider: openai, model: gpt-5.6-luna }
+    # Evidence grounding for recon/discovery judges - OpenRouter Hy3.
+    grounder: { provider: openai, model: gpt-5.6-luna }
+    # Browser operators - native Gemini (context cache).
+    operator: { provider: gemini, model: gemini-3.5-flash-lite }
+  roles:
+    generation_expert: offensive_generator   # author attack prompts
+    generation_judge: offensive_editor        # judge/refine attack prompts
+    generation_critic: offensive_critic       # target-aware preflight (fast path)
+    assessment_expert: triager                # assess response risk
+    assessment_judge: triager                 # adjudicate risk verdict
+    playbook_author: methodologist            # author security playbooks (flagship)
+    playbook_critic: triager                   # critique playbooks (preamble mitigates refusals)
+    enhance_theory: offensive_fast            # closed-loop theory (Grok - Step 1 speed)
+    # adaptive follow-ups use prompt_transforms (offensive_fast)
+    recon: operator                           # reconnaissance
+    recon_consolidate: methodologist          # distill report-derived recon intel
+    grounding_judge: grounder                 # ground recon/discovery in evidence
+    discovery: operator                       # UI element discovery
+    prompt_transforms: offensive_fast         # rewrite/obfuscate/translate + adaptive follow-ups
+    prompt_code_embed: operator               # Code dropdown embeds (tiny flash-lite)
+    boilerplate_classifier: operator          # classify boilerplate responses
+
+  defaults:
+    # Content-policy refusal fallback. When a provider hard-refuses adversarial
+    # red-team content (e.g. OpenAI's cyber_policy 400), the call is retried once
+    # on this permissive profile so generation/judging isn't lost. Points at
+    # OpenRouter Hermes 70B (offensive_fallback) - cheaper same-family retry.
+    # Set to a profile name or an inline {provider, model}; env override:
+    # REFUSAL_FALLBACK_PROVIDER / REFUSAL_FALLBACK_MODEL. Remove to disable.
+    refusal_fallback: offensive_fallback
+    # Transient-error retry (429/503) applied to every provider. Short initial
+    # backoff (+jitter) so one transient error doesn't stall a run; high cap kept
+    # only for sustained rate limiting.
+    retry:
+      attempts: 4
+      backoff_min: 3
+      backoff_max: 90
+    # Rate limiting. Two independent layers (both off unless set):
+    #   - global token bucket: capacity + refill_per_sec (or RATE_LIMIT_CAPACITY /
+    #     RATE_LIMIT_REFILL_PER_SEC in .env). Applies to every provider.
+    #   - per_provider RPM: smooths bursts from parallel fan-out so a provider's
+    #     per-minute limit isn't tripped. Each bucket starts full (1 min burst)
+    #     then throttles sustained throughput to the RPM. Override per provider via
+    #     RATE_LIMIT_RPM_<PROVIDER> in .env (e.g. RATE_LIMIT_RPM_OPENAI=500).
+    #     Tune these to your account tier; raise/remove if you have headroom.
+    rate_limit:
+      capacity: 0
+      refill_per_sec: 0
+      per_provider:
+        gemini: 300
+        openai: 450
+        anthropic: 100
+        grok: 60
+        openrouter: 200

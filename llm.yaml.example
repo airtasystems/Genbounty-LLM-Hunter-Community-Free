@@ -1,0 +1,105 @@
+# Example assistant LLM layouts (copy one block into llm.yaml to use).
+#
+# OpenRouter is optional convenience - not required. Native openai / anthropic /
+# gemini / grok adapters stay first-class. Keys stay in .env; only providers
+# referenced by active profiles need keys.
+#
+# Validate refusal rates and JSON reliability per role before committing.
+
+# ---------------------------------------------------------------------------
+# Layout A - Hybrid (matches shipped llm.yaml)
+# Grok 4.3 author/transforms/preflight critic/enhance_theory + Hermes 70B refusal
+# fallback + Hy3 grounder via OpenRouter; OpenAI Sol judge + Anthropic/Gemini native.
+# OpenRouter slugs verified 2026-07-27: nousresearch/hermes-4-70b,
+# x-ai/grok-4.3 (replaces deprecated grok-4-fast), tencent/hy3.
+# Needs: OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY
+# (GROK_API_KEY not required for Layout A).
+# ---------------------------------------------------------------------------
+llm:
+  profiles:
+    offensive_generator: { provider: openrouter, model: x-ai/grok-4.3 }
+    offensive_fallback:  { provider: openrouter, model: nousresearch/hermes-4-70b }
+    offensive_fast:      { provider: openrouter, model: x-ai/grok-4.3 }
+    offensive_editor:    { provider: openai, model: gpt-5.6-sol }
+    offensive_critic:    { provider: openrouter, model: x-ai/grok-4.3 }
+    triager:             { provider: anthropic, model: claude-sonnet-5 }
+    methodologist:       { provider: anthropic, model: claude-sonnet-5 }
+    grounder:            { provider: openrouter, model: tencent/hy3 }
+    operator:            { provider: gemini, model: gemini-3.1-flash-lite }
+
+  roles:
+    generation_expert: offensive_generator
+    generation_judge: offensive_editor
+    generation_critic: offensive_critic
+    assessment_expert: triager
+    assessment_judge: triager
+    playbook_author: methodologist
+    playbook_critic: triager
+    enhance_theory: offensive_fast
+    recon: operator
+    recon_consolidate: methodologist
+    grounding_judge: grounder
+    discovery: operator
+    prompt_transforms: offensive_fast
+    prompt_code_embed: operator
+    boilerplate_classifier: operator
+
+  defaults:
+    refusal_fallback: offensive_fallback
+    retry:
+      attempts: 4
+      backoff_min: 15
+      backoff_max: 90
+    rate_limit:
+      per_provider:
+        gemini: 300
+        openai: 450
+        anthropic: 100
+        grok: 60
+        openrouter: 200
+
+# ---------------------------------------------------------------------------
+# Layout B - Native multi-provider (no OpenRouter)
+# Uncomment this block and replace Layout A above when avoiding aggregators.
+# Needs: GEMINI_API_KEY + OPENAI_API_KEY + ANTHROPIC_API_KEY (+ GROK_API_KEY
+#        if you keep Grok on offensive_fast)
+# ---------------------------------------------------------------------------
+# llm:
+#   profiles:
+#     offensive_generator: { provider: gemini, model: gemini-3.1-flash-lite }
+#     offensive_fast:      { provider: grok, model: grok-4-fast }
+#     offensive_editor:    { provider: openai, model: gpt-5.6-sol }
+#     triager:             { provider: anthropic, model: claude-opus-5 }
+#     methodologist:       { provider: anthropic, model: claude-opus-5 }
+#     grounder:            { provider: openai, model: gpt-5.6-sol }
+#     operator:            { provider: gemini, model: gemini-3.1-flash-lite }
+#
+#   roles:
+#     generation_expert: offensive_generator
+#     generation_judge: offensive_editor
+#     generation_critic: offensive_editor
+#     assessment_expert: triager
+#     assessment_judge: triager
+#     playbook_author: methodologist
+#     playbook_critic: triager
+#     enhance_theory: methodologist
+#     recon: operator
+#     recon_consolidate: methodologist
+#     grounding_judge: grounder
+#     discovery: operator
+#     prompt_transforms: offensive_fast
+#     prompt_code_embed: operator
+#     boilerplate_classifier: operator
+#
+#   defaults:
+#     refusal_fallback: offensive_generator
+#     retry:
+#       attempts: 4
+#       backoff_min: 15
+#       backoff_max: 90
+#     rate_limit:
+#       per_provider:
+#         gemini: 300
+#         openai: 450
+#         anthropic: 100
+#         grok: 60

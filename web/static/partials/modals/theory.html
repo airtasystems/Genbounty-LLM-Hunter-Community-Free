@@ -1,0 +1,37 @@
+  <!-- Improvement plan confirmation modal -->
+  <div v-if="showEnhanceTheoryModal" class="modal-backdrop">
+    <div class="modal modal-wide">
+      <div class="modal-sub">
+        Confirm improvement plan
+      </div>
+      <div class="modal-help">
+        <p v-if="enhanceTheoryRound">Round {{ enhanceTheoryRound }} - review why the last run failed and how the next prompt batch will improve.</p>
+        <p v-else>Review why the last run failed and how the next prompt batch will improve.</p>
+        <pre class="enhance-theory-body">{{ enhanceTheoryText }}</pre>
+        <div class="form-row pb-field-stack" style="margin-top:1rem;">
+          <label for="enhance-theory-reject-reason">Rejection reason (required to reject)</label>
+          <textarea
+            id="enhance-theory-reject-reason"
+            v-model="enhanceTheoryRejectReason"
+            rows="3"
+            placeholder="e.g. Focus on tool-call injection, not roleplay - refusals were policy-only, not format blocks"
+          ></textarea>
+        </div>
+        <p v-if="enhanceTheoryError" class="modal-error">{{ enhanceTheoryError }}</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="cancelEnhanceTheoryReview" :disabled="enhanceTheorySubmitting">Abort</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          @click="rejectEnhanceTheory"
+          :disabled="enhanceTheorySubmitting || !enhanceTheoryRejectReason.trim()"
+        >
+          {{ enhanceTheorySubmitting ? 'Sending…' : 'Reject & revise' }}
+        </button>
+        <button type="button" class="btn btn-primary" @click="acceptEnhanceTheory" :disabled="enhanceTheorySubmitting">
+          {{ enhanceTheorySubmitting ? 'Approving…' : 'Approve plan' }}
+        </button>
+      </div>
+    </div>
+  </div>

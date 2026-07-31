@@ -1,0 +1,145 @@
+        <!-- Notes -->
+        <template v-if="tab === 'notes'">
+          <div class="notes-view">
+            <div class="notes-view-header">
+              <div class="notes-view-title-row">
+                <h2>Notes</h2>
+                <div v-if="site && component" class="notes-mode-tabs" role="tablist" aria-label="Notes view mode">
+                  <button
+                    type="button"
+                    class="notes-mode-tab"
+                    :class="{ 'notes-mode-tab--active': notesViewMode === 'notes' }"
+                    role="tab"
+                    :aria-selected="notesViewMode === 'notes'"
+                    @click="setNotesViewMode('notes')"
+                  >Notes</button>
+                  <button
+                    type="button"
+                    class="notes-mode-tab"
+                    :class="{ 'notes-mode-tab--active': notesViewMode === 'json' }"
+                    role="tab"
+                    :aria-selected="notesViewMode === 'json'"
+                    @click="setNotesViewMode('json')"
+                  >JSON</button>
+                </div>
+                <span v-if="notesMsg" class="notes-view-hint notes-view-hint--ok">{{ notesMsg }}</span>
+                <button
+                  type="button"
+                  class="notes-save-btn"
+                  @click="saveNotes"
+                  :disabled="notesSaving || !site || !component || (notesViewMode === 'json' && !notesJsonText.trim())"
+                >
+                  {{ notesSaving ? 'Saving…' : (notesExists ? 'Save' : 'Create') }}
+                </button>
+              </div>
+              <p v-if="!site || !component" class="cfg-note notes-scope-warn">
+                Select a site and component in the header before writing notes.
+              </p>
+              <p v-if="notesError" class="cfg-note notes-scope-warn" style="color:var(--red);">{{ notesError }}</p>
+              <p v-if="notesLoading" class="cfg-note notes-scope-warn">Loading…</p>
+            </div>
+
+            <template v-if="site && component && !notesLoading">
+              <div v-if="notesViewMode === 'notes'" class="notes-workspace">
+                <div class="notes-pane notes-pane--composer">
+                  <div class="notes-pane-toolbar">
+                    <span class="notes-pane-label">New note</span>
+                    <button
+                      type="button"
+                      class="notes-ghost-btn"
+                      @click="addNoteFromComposer"
+                      :disabled="notesSaving || !notesDraftBody.trim()"
+                    >Add note</button>
+                  </div>
+                  <input
+                    id="notes-draft-title"
+                    class="notes-title-input"
+                    type="text"
+                    v-model="notesDraftTitle"
+                    placeholder="Title (optional)"
+                    :disabled="notesSaving"
+                    aria-label="New note title"
+                  >
+                  <textarea
+                    id="notes-draft-body"
+                    class="notes-body-surface"
+                    v-model="notesDraftBody"
+                    placeholder="Write a freeform note…"
+                    :disabled="notesSaving"
+                    aria-label="New note body"
+                  ></textarea>
+                </div>
+
+                <div class="notes-pane-split" aria-hidden="true"></div>
+
+                <div class="notes-pane notes-pane--vault">
+                  <div class="notes-pane-toolbar">
+                    <span class="notes-pane-label">
+                      Vault
+                      <span v-if="(notesRecord?.notes || []).length" class="notes-pane-count">
+                        {{ (notesRecord?.notes || []).length }}
+                      </span>
+                    </span>
+                    <span v-if="notesRecord?.updated_at" class="notes-pane-meta">
+                      updated {{ notesRecord.updated_at }}
+                    </span>
+                  </div>
+                  <div class="notes-vault-scroll">
+                    <p v-if="!(notesRecord?.notes || []).length" class="notes-empty">
+                      No notes yet. Add one here, or use Add to notes after a Firing Range fire.
+                    </p>
+                    <article
+                      v-for="(note, idx) in (notesRecord?.notes || [])"
+                      :key="note.id || idx"
+                      class="notes-entry"
+                    >
+                      <div class="notes-entry-meta">
+                        <span class="notes-entry-source">{{ note.source || 'manual' }}</span>
+                        <span v-if="note.created_at" class="notes-entry-time">{{ note.created_at }}</span>
+                        <button
+                          type="button"
+                          class="notes-ghost-btn notes-ghost-btn--danger"
+                          :class="confirmButtonClass('notes-del-' + (note.id || idx), '', 'notes-ghost-btn--armed')"
+                          @click="deleteNoteAt(idx)"
+                          :disabled="notesSaving"
+                        >{{ confirmButtonLabel('notes-del-' + (note.id || idx), 'Delete') }}</button>
+                      </div>
+                      <input
+                        type="text"
+                        class="notes-title-input"
+                        v-model="note.title"
+                        placeholder="Title"
+                        @input="notesMarkDirty"
+                        :aria-label="'Note title ' + (idx + 1)"
+                      >
+                      <textarea
+                        class="notes-body-surface notes-body-surface--entry"
+                        rows="4"
+                        v-model="note.body"
+                        placeholder="Note body…"
+                        @input="notesMarkDirty"
+                        :aria-label="'Note body ' + (idx + 1)"
+                      ></textarea>
+                    </article>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="notes-workspace notes-workspace--json">
+                <div class="notes-pane notes-pane--json">
+                  <div class="notes-pane-toolbar">
+                    <span class="notes-pane-label">notes.json</span>
+                  </div>
+                  <textarea
+                    v-model="notesJsonText"
+                    class="notes-body-surface notes-body-surface--json"
+                    spellcheck="false"
+                    placeholder='{ "updated_at": "", "notes": [] }'
+                    @input="notesOnJsonInput"
+                    aria-label="notes.json editor"
+                  ></textarea>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>

@@ -1,0 +1,8 @@
+python-dotenv>=1.0.0
+playwright>=1.40.0
+playwright-stealth>=2.0.0
+pyyaml>=6.0
+rich>=13.0.0
+google-genai>=1.0.0
+beautifulsoup4>=4.12.0
+tenacity>=8.0.0

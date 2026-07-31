@@ -1,0 +1,260 @@
+        <!-- Report -->
+        <template v-if="tab === 'export'">
+          <div class="export-view" :class="{ 'export-view--results-maximized': exportResultsMaximizedActive }">
+            <div class="export-view-controls">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <h2 style="margin:0;">Report</h2>
+              </div>
+
+              <div class="run-controls-panel">
+                <div class="run-controls-panel__row run-controls-panel__row--selects">
+                  <label class="run-controls-inline-label" for="export-report-select">Pipeline Report</label>
+                  <select id="export-report-select" v-model="exp.report" class="export-report-select">
+                    <option value="">Select…</option>
+                    <optgroup label="Batch by time">
+                      <option
+                        v-for="w in RISK_TIME_WINDOWS"
+                        :key="w.id"
+                        :value="riskWindowValue(w.id)"
+                        :disabled="exportWindowCounts[w.id] === 0"
+                      >
+                        {{ w.label }} ({{ exportWindowCounts[w.id] }} report{{ exportWindowCounts[w.id] === 1 ? '' : 's' }})
+                      </option>
+                    </optgroup>
+                    <optgroup v-if="logs.reports.length" label="Individual reports">
+                      <option v-for="r in logs.reports" :key="r.path" :value="r.path">{{ r.name }}</option>
+                    </optgroup>
+                  </select>
+                  <div v-if="expPreview" class="export-preview">
+                    <span v-if="expPreview.batchReports" class="badge badge-neutral">{{ expPreview.batchReports }} report(s)</span>
+                    <template v-else>
+                      <span class="badge badge-neutral">{{ expPreview.exportCount }} of {{ expPreview.count }} result(s)</span>
+                      <span v-if="expPreview.exportCount === 0" class="badge" style="background:rgba(248,113,113,0.15);color:var(--red);">none match filter</span>
+                    </template>
+                    <span v-if="expPreview.playbook" class="badge badge-info">{{ expPreview.playbook }}</span>
+                    <span v-if="expPreview.timestamp" class="badge badge-neutral" style="font-family:monospace;font-size:11px;">{{ expPreview.timestamp }}</span>
+                  </div>
+                </div>
+
+                <div class="run-controls-panel__row run-controls-panel__row--opts">
+                  <label class="run-controls-check" for="exp-auto-after-assess">
+                    <input type="checkbox" id="exp-auto-after-assess" v-model="exp.autoAfterAssess">
+                    <span>Auto-submit after Analysis</span>
+                  </label>
+                </div>
+
+                <div class="run-controls-panel__row run-controls-panel__row--opts export-risk-row">
+                  <span class="run-controls-inline-label">Risk levels</span>
+                  <div class="export-risk-levels">
+                    <label v-for="lvl in EXPORT_RISK_LEVELS" :key="lvl.id" class="checkbox-row export-risk-chip">
+                      <input type="checkbox" :checked="exp.riskLevels[lvl.id]" @change="toggleExpRiskLevel(lvl.id)">
+                      <span :class="'risk-label risk-' + lvl.id">{{ lvl.label }}</span>
+                    </label>
+                  </div>
+                </div>
+                <p v-if="!expSelectedRiskLevels.length" class="cfg-note export-inline-note" style="color:var(--red);">Select at least one risk level.</p>
+                <p
+                  v-else-if="expPreview && expPreview.count > 0 && expPreview.exportCount === 0"
+                  class="cfg-note export-inline-note"
+                  style="color:var(--yellow);"
+                >
+                  {{ exportSubmitBlockedMessage }}
+                </p>
+
+                <div class="run-controls-panel__row run-controls-panel__row--opts export-creds-row">
+                  <span class="run-controls-inline-label">User ID</span>
+                  <input class="export-user-id" v-model="exp.user_id" placeholder="MongoDB ObjectId" aria-label="Genbounty user ID">
+                  <span class="export-creds-pill" :title="expCreds.has_api_key ? 'API key set in .env' : 'No API key'">
+                    API {{ expCreds.has_api_key ? '●●●●' : '-' }}
+                  </span>
+                  <details class="export-creds-details" :open="!expCreds.has_api_key">
+                    <summary>{{ expCreds.has_api_key ? 'Update key' : 'Enter key' }}</summary>
+                    <div class="export-creds-edit">
+                      <input v-model="expCredsEdit.api_key" type="password" placeholder="Genbounty API key (.env)">
+                      <button class="btn btn-secondary btn-sm" @click="saveExpCreds" :disabled="expCredsSaving || !(expCredsEdit.api_key || '').trim()">
+                        {{ expCredsSaving ? 'Saving…' : 'Save key' }}
+                      </button>
+                      <button
+                        v-if="expCreds.has_api_key"
+                        type="button"
+                        class="btn btn-sm"
+                        :class="confirmButtonClass('exp-creds', 'btn-ghost')"
+                        @click="clearExpCreds"
+                      >{{ confirmButtonLabel('exp-creds', 'Remove key') }}</button>
+                      <span v-if="expCredsMsg" class="export-inline-msg">{{ expCredsMsg }}</span>
+                    </div>
+                  </details>
+                </div>
+
+                <div class="run-controls-panel__actions">
+                  <button class="btn btn-secondary btn-sm" @click="saveExportSettings" :disabled="!site || !component || expSaving || !expSelectedRiskLevels.length">
+                    {{ expSaving ? 'Saving…' : 'Save settings' }}
+                  </button>
+                  <span v-if="expSaved" class="export-inline-msg" style="color:var(--green);">Saved</span>
+                  <span v-if="expSaveError" class="export-inline-msg" style="color:var(--red);">{{ expSaveError }}</span>
+                  <button class="btn btn-primary" @click="startExport" :disabled="!exportEnabled || !expSelectedRiskLevels.length || !expCreds.has_api_key || !exp.user_id">
+                    Submit to Genbounty
+                  </button>
+                  <button class="btn btn-secondary" @click="exportReportAsJson" :disabled="!exportEnabled || jsonExporting">
+                    {{ jsonExporting ? 'Preparing…' : 'Export as JSON' }}
+                  </button>
+                </div>
+                <p
+                  v-if="exportSubmitBlockedMessage && !(expPreview && expPreview.count > 0 && expPreview.exportCount === 0)"
+                  class="cfg-note export-inline-note"
+                  style="color:var(--yellow);"
+                >
+                  {{ exportSubmitBlockedMessage }}
+                </p>
+                <p class="cfg-note export-inline-note">
+                  JSON download needs no Genbounty credentials. Settings save to this component’s <code>config.yaml</code>; API key stays in <code>.env</code>.
+                </p>
+              </div>
+            </div>
+
+            <div
+              class="run-results-section"
+              :class="{
+                'run-results-section--minimized': exportResultsLayout === 'minimized',
+                'run-results-section--maximized': exportResultsLayout === 'maximized',
+              }"
+            >
+              <div
+                class="run-results-panel"
+                :class="{ 'run-results-panel--minimized': exportResultsLayout === 'minimized' }"
+              >
+                <div
+                  class="findings-metrics findings-metrics--in-panel"
+                  role="group"
+                  aria-label="Export results"
+                >
+                  <span class="results-panel-title">
+                    Last Export
+                    <span v-if="expResult" class="run-results-count">({{ expResult.status }})</span>
+                  </span>
+                  <div class="results-layout-actions">
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="toggleExportResultsMinimize"
+                      :title="exportResultsLayout === 'minimized' ? 'Expand export results' : 'Minimize export results'"
+                      :aria-label="exportResultsLayout === 'minimized' ? 'Expand export results' : 'Minimize export results'"
+                      :aria-expanded="exportResultsLayout !== 'minimized'"
+                    >
+                      <svg
+                        v-if="exportResultsLayout === 'minimized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 6.5 8 11l5-4.5H3z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 4h10v1.5H3V4zm0 6.5h10V12H3v-1.5z"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="toggleExportResultsMaximize"
+                      :title="exportResultsLayout === 'maximized' ? 'Restore default layout' : 'Maximize export results'"
+                      :aria-label="exportResultsLayout === 'maximized' ? 'Restore default layout' : 'Maximize export results'"
+                    >
+                      <svg
+                        v-if="exportResultsLayout === 'maximized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M5 3h8v8h-1.5V4.5H5V3zM3 5h8v8H3V5zm1.5 1.5v5h5v-5h-5z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  v-show="exportResultsLayout !== 'minimized'"
+                  class="run-results-table-wrap export-results-wrap"
+                >
+                  <template v-if="expResult">
+                    <table class="results-table run-results-table export-stats-table">
+                      <colgroup>
+                        <col class="col-index">
+                        <col class="col-prompt">
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th>Metric</th>
+                          <th>Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td class="run-results-index-cell">Status</td>
+                          <td class="cell-prompt" :class="expResult.status === 'done' ? 'export-stat-ok' : 'export-stat-err'">{{ expResult.status }}</td>
+                        </tr>
+                        <tr>
+                          <td class="run-results-index-cell">Total</td>
+                          <td class="cell-prompt">{{ expResult.total }}</td>
+                        </tr>
+                        <tr>
+                          <td class="run-results-index-cell">Created</td>
+                          <td class="cell-prompt export-stat-ok">{{ expResult.created }}</td>
+                        </tr>
+                        <tr>
+                          <td class="run-results-index-cell">Failed</td>
+                          <td class="cell-prompt" :class="expResult.failed > 0 ? 'export-stat-err' : ''">{{ expResult.failed }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <table
+                      v-if="expResult.errors && expResult.errors.length"
+                      class="results-table run-results-table export-errors-table"
+                    >
+                      <colgroup>
+                        <col class="col-index">
+                        <col class="col-prompt">
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Error</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(e, i) in expResult.errors" :key="i">
+                          <td class="run-results-index-cell">{{ i + 1 }}</td>
+                          <td class="cell-prompt export-error-line">{{ e }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </template>
+                  <p v-else class="run-results-empty run-results-empty--in-panel">
+                    Genbounty submission results appear here after a successful submit. JSON exports download directly to your browser.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>

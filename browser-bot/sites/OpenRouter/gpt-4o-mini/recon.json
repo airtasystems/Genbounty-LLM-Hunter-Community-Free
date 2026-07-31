@@ -1,0 +1,38 @@
+{
+  "probed_at": null,
+  "source_mode": "manual_seed",
+  "target_url": "https://openrouter.ai/api/v1/chat/completions",
+  "transport": "api",
+  "host": "openrouter.ai",
+  "product_name": "OpenRouter",
+  "vendor": "OpenRouter",
+  "description": "OpenAI-compatible chat completions API routing to many upstream models.",
+  "provider": "OpenRouter",
+  "model_hints": [
+    "openai/gpt-4o-mini"
+  ],
+  "inference_type": "api",
+  "capabilities": [
+    "text-generation"
+  ],
+  "tools": [],
+  "integrations": [],
+  "api_endpoints": [
+    "https://openrouter.ai/api/v1/chat/completions"
+  ],
+  "auth_mechanisms": [
+    "API key (Bearer)"
+  ],
+  "tech_stack": [
+    "REST API",
+    "JSON",
+    "OpenAI-compatible"
+  ],
+  "ui_features": [],
+  "security_observations": [],
+  "attack_surface_notes": [
+    "Text prompt/response over HTTP Chat Completions.",
+    "Upstream model behavior depends on the selected OpenRouter slug."
+  ],
+  "evidence": []
+}

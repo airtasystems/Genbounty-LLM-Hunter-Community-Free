@@ -1,0 +1,41 @@
+# Core AI / LLM
+google-genai
+langchain-core
+langchain-google-genai
+langgraph
+# Additional assistant LLM providers (multi-provider layer: pipeline/llm)
+openai
+anthropic
+
+# Browser automation (browser-bot)
+playwright
+playwright-stealth
+
+# Config / serialisation
+python-dotenv
+pyyaml
+
+# Web UI (starlette>=1.0.1 fixes CVE-2026-48710 / BadHost)
+starlette>=1.0.1
+fastapi
+uvicorn
+pydantic
+python-multipart
+
+# Terminal output
+rich
+
+# Retry (optional but used when available)
+tenacity
+
+# Multimodal payload generators (optional - install for multimodal strategy)
+reportlab
+PyPDF2
+pillow
+qrcode[pil]
+gtts
+numpy
+scipy
+pydub
+audioop-lts; python_version >= "3.13"
+Faker

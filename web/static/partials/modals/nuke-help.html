@@ -1,0 +1,14 @@
+  <!-- Header Nuke help -->
+  <div v-if="showNukeHelpModal" class="modal-backdrop" @click.self="closeNukeHelpModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nuke-help-title">
+      <h2 id="nuke-help-title" class="modal-title">Nuke</h2>
+      <div class="modal-help">
+        <p>Wipes experiment artifacts for this site/component: tests, logs, intel, theory history, manual attacks, html, and login profile.</p>
+        <p>Keeps <code>config.yaml</code>, <code>auth.json</code>, and <code>recon.json</code>.</p>
+        <p>Writes a full pre-wipe backup under <code>nuke_backups/</code> (timestamped folder), then clears sticky localStorage and reloads.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="closeNukeHelpModal">Close</button>
+      </div>
+    </div>
+  </div>

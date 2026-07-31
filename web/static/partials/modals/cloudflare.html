@@ -1,0 +1,61 @@
+  <!-- Run Cloudflare modal -->
+  <div v-if="showRunCloudflareModal" class="modal-backdrop" @click.self="onCloudflareBackdropClick">
+    <div class="modal modal-wide">
+      <div class="modal-sub">Cloudflare verification</div>
+      <div class="modal-help">
+        <p v-if="runCloudflareTestsStopped" class="modal-note-warn">Probes were stopped because Cloudflare cannot be passed with the current browser settings.</p>
+        <p v-else>Probes paused at a Cloudflare “Verify you are human” screen for <strong>{{ site }}</strong>.</p>
+        <template v-if="cloudflareModalNeedsSettings">
+          <p>Use a <strong>visible</strong> browser (Headless off). Pool or auto fetch method is fine - you do not need human-only mode.</p>
+          <div class="cloudflare-settings-form">
+            <div class="form-row">
+              <label>Fetch method</label>
+              <select v-model="runCloudflareSettings.FETCH_METHOD" class="input">
+                <option value="human">human</option>
+                <option value="auto">auto</option>
+                <option value="pool">pool</option>
+                <option value="cluster">cluster</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" :checked="!runCloudflareSettings.HEADLESS" @change="runCloudflareSettings.HEADLESS = !$event.target.checked">
+                Visible browser (Headless off)
+              </label>
+            </div>
+            <div class="form-row">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" v-model="runCloudflareSettings.cloudflare_headed">
+                Cloudflare-headed target (remember visible browser for this component)
+              </label>
+            </div>
+          </div>
+        </template>
+        <template v-else-if="cloudflareModalTimedOut">
+          <p>Verification was not completed before the wait period ended. Complete the checkbox in the browser, then re-run Attack.</p>
+        </template>
+        <template v-else>
+          <p>The runner will try auto-click and wait up to ~2 minutes. Open the <strong>visible browser window</strong>, tick the checkbox, then wait for probes to continue.</p>
+          <p v-if="runBlockedInfo && runBlockedInfo.remaining_sec">Time remaining: ~{{ runBlockedInfo.remaining_sec }}s</p>
+        </template>
+      </div>
+      <div class="modal-actions">
+        <template v-if="cloudflareModalNeedsSettings">
+          <button type="button" class="btn btn-ghost" @click="dismissRunCloudflareModal">Close</button>
+          <button type="button" class="btn btn-primary" @click="applyCloudflareSettingsAndRerun" :disabled="runCloudflareSaving || !site || !component">
+            {{ runCloudflareSaving ? 'Saving…' : 'Apply settings & re-run Attack' }}
+          </button>
+        </template>
+        <template v-else-if="cloudflareModalTimedOut">
+          <button type="button" class="btn btn-ghost" @click="dismissRunCloudflareModal">Close</button>
+          <button type="button" class="btn btn-primary" @click="rerunAfterCloudflareTimeout">Re-run Attack</button>
+        </template>
+        <template v-else>
+          <button type="button" class="btn btn-ghost" @click="cancelRunTestsFromCloudflare">Stop probes</button>
+          <button type="button" class="btn btn-primary" @click="dismissRunCloudflareModal">OK - I'll complete it in the browser</button>
+        </template>
+      </div>
+      <p v-if="runCloudflareError" class="modal-error">{{ runCloudflareError }}</p>
+    </div>
+  </div>
+

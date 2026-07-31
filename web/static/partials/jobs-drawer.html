@@ -1,0 +1,65 @@
+      <!-- Jobs drawer -->
+      <div
+        class="jobs-drawer"
+        :class="[
+          !jobsOpen ? 'jobs-drawer--collapsed' : '',
+          'jobs-drawer--tone-' + jobsDrawerSummary.tone,
+        ]"
+        v-if="jobs.length"
+      >
+        <button
+          type="button"
+          class="jobs-header"
+          @click="jobsOpen = !jobsOpen"
+          :aria-expanded="jobsOpen"
+          :title="jobsOpen ? 'Hide jobs panel' : 'Show jobs panel'"
+        >
+          <span class="jobs-chevron" aria-hidden="true">▾</span>
+          <span class="jobs-title">Jobs</span>
+          <span class="jobs-summary">
+            <span class="jobs-summary-focus">{{ jobsDrawerSummary.focus }}</span>
+            <span class="jobs-summary-chips" aria-label="Job status counts">
+              <span
+                v-for="chip in jobsDrawerSummary.chips"
+                :key="chip.key"
+                class="jobs-chip"
+                :class="'jobs-chip--' + chip.key"
+              >{{ chip.count }} {{ chip.label }}</span>
+            </span>
+          </span>
+          <span class="jobs-toggle-label">{{ jobsOpen ? 'Hide' : 'Show' }}</span>
+        </button>
+        <div class="jobs-body" v-show="jobsOpen">
+          <table>
+            <thead><tr><th class="col-row-expand"></th><th>ID</th><th>Type</th><th>Site</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="j in jobs" :key="j.id">
+                <td class="row-expand-cell">
+                  <button
+                    type="button"
+                    class="btn-icon row-expand-btn"
+                    title="Expand row"
+                    aria-label="Expand row"
+                    @click.stop="openJobRowDetail(j)"
+                  >
+                    <svg class="row-expand-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                    </svg>
+                  </button>
+                </td>
+                <td style="font-family:var(--mono);font-size:11px;">{{ j.id }}</td>
+                <td>{{ prettyJobType(j.type) }}</td>
+                <td>{{ j.site }}/{{ j.component }}</td>
+                <td><span class="badge" :class="'badge-' + j.status">{{ j.status }}</span></td>
+                <td>
+                  <button
+                    v-if="jobIsActive(j.status)"
+                    class="btn btn-primary btn-sm"
+                    @click="onJobsDrawerCancel(j)"
+                  >Cancel</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>

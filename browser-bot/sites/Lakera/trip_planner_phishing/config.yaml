@@ -1,0 +1,109 @@
+# =============================================================================
+# Component config - browser-bot/sites/<site>/<component>/config.yaml
+# =============================================================================
+#
+# Tells browser-bot how to drive this AI product's UI: where to log in, which page
+# to open, what to fill in, how to submit, and where to read the model response.
+#
+# Precedence for settings: overrides here beat site config, config.py/.env, then
+# config.defaults.yaml. See repo-root config.defaults.yaml for all settings keys.
+#
+# Prefer stable CSS selectors: #id, [name="..."], [data-testid="..."], tag.class
+# Playwright also supports: button:has-text("Send") scoped under a landmark.
+#
+# Web UI: Settings → Component Config (or run Discovery to auto-fill submission).
+
+# --- Legacy / API fetch (optional) -------------------------------------------
+# urls: HTTP GET targets for non-UI fetch modes
+# posts: POST targets [{url, data?, json?, headers?}]
+urls: []
+posts: []
+
+# --- Auth --------------------------------------------------------------------
+# Page opened for "Add Login" / manual sign-in. Usually the site root or /login.
+# http:// for localhost; https:// for production hosts.
+login_url: "https://play.lakera.ai/agent-breaker/trip_planner_phishing"
+
+# Optional (usually site-level): refresh_url, refresh_mode (cookie | both), endpoint_url
+
+# --- UI submission (browser automation - Run Tests / Sample Request) ----------
+submission:
+  # Transport: ui (browser automation) | api (HTTP endpoint)
+  transport: ui
+
+  # Page URL where the chat / prompt UI lives (loaded before each test).
+  start_url: "https://play.lakera.ai/agent-breaker/trip_planner_phishing"
+
+  # Fields to fill in order before submit. One object per input.
+  # Leading type: click + surface_prep: true rows are surface pre-steps (notices/tabs/levels/Start) replayed after every reload before the prompt.
+  inputs:
+    - selector: "button[aria-pressed=\"false\"]"
+      # Input type - affects how Playwright fills the field:
+      #   text | textarea | contenteditable | password | email | search
+      #   select | combobox | checkbox | radio | click | file (path_from: payload)
+      type: click
+      upload_prep: true
+      surface_prep: true
+      name: "View all Levels"
+      role: "button"
+      # value: optional fixed string (usually leave unset; tests supply the prompt)
+    - selector: "button[type=\"button\"]"
+      # Input type - affects how Playwright fills the field:
+      #   text | textarea | contenteditable | password | email | search
+      #   select | combobox | checkbox | radio | click | file (path_from: payload)
+      type: click
+      upload_prep: true
+      surface_prep: true
+      name: "Level 4 EXPERT"
+      # value: optional fixed string (usually leave unset; tests supply the prompt)
+    - selector: "textarea"
+      # Input type - affects how Playwright fills the field:
+      #   text | textarea | contenteditable | password | email | search
+      #   select | combobox | checkbox | radio | click | file (path_from: payload)
+      type: textarea
+      # value: optional fixed string (usually leave unset; tests supply the prompt)
+
+  # Element that sends the prompt (button, etc.).
+  submit_selector: "button[type=\"submit\"]"
+
+  # Container(s) for assistant output - roots the response capture.
+  # Often a message list, bubble, or [data-testid="assistant-message"].
+  response_selector: "div.markdown"
+
+  # Optional: descendant under response_selector - last visible match wins.
+  # Use when the root holds multiple messages and you want the latest bubble.
+  # response_within_selector: div.message-body
+
+  # Optional: narrower node for inner_text only (e.g. "> p" inside the bubble).
+  # response_text_within_selector: "> p"
+
+  # Response capture strategy (auto-detected in Discovery for message lists).
+  # last = newest match; role = assistant-only roots;
+  # parity_odd / parity_even = alternating user/assistant threads.
+  response_list_selector: "div.markdown"
+
+  # How to submit after filling inputs.
+  # Options: click | enter
+  submit_via: click
+
+  # Max time to wait for a new response after submit, in milliseconds (min ~500).
+  response_wait_ms: 8000
+
+  # Substrings to reject as non-actionable response text (case-insensitive,
+  # per-line when capture is longer). Recorded during Configure (welcome/intro
+  # click step) and may also be auto-appended from pre-submit chrome.
+  response_ignore_substrings: ['An AI travel assistant that helps users plan trips by finding recommendations, flights,
+    hotels and attractions on the web and producing day-by-day itineraries.', Hi!
+    I'm here to help you plan your trips and book your flights and hotels.]
+
+  # Optional multi-turn UI mode (for tree-of-thoughts / batched suites):
+  # mode: single | multi     - single = one prompt per case (default)
+  # batch_size: 3           - if >1 without mode, implies multi
+
+# --- Settings overrides (optional) ---------------------------------------------
+# Same keys as Settings → Browser Config and Cache Control. Omit keys to inherit.
+# Full list and allowed values: see config.defaults.yaml at repo root.
+settings:
+  HEADLESS: true
+  USE_CDP_BROWSER: false
+  RUN_SCREENSHOT_INTERVAL_S: 5

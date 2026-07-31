@@ -1,0 +1,37 @@
+  <!-- Shared table row detail (read-only expand) -->
+  <div
+    v-if="showRowDetailModal"
+    class="modal-backdrop"
+    @click.self="closeRowDetailModal"
+  >
+    <div
+      class="modal modal-wide modal-row-detail"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="row-detail-title"
+      tabindex="-1"
+    >
+      <div class="modal-sub" id="row-detail-title">{{ rowDetailTitle }}</div>
+      <p v-if="rowDetailSubtitle" class="modal-hint" style="margin-top:-4px;margin-bottom:14px;">
+        {{ rowDetailSubtitle }}
+      </p>
+      <div class="modal-row-detail-body">
+        <div
+          v-for="(f, i) in rowDetailFields"
+          :key="i"
+          class="modal-field"
+          v-show="(f.value || '').trim()"
+        >
+          <label>{{ f.label }}</label>
+          <pre class="modal-row-detail-pre">{{ f.value }}</pre>
+        </div>
+        <p
+          v-if="!(rowDetailFields || []).some((f) => (f.value || '').trim())"
+          class="cfg-note"
+        >No fields to show for this row.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" @click="closeRowDetailModal">Close</button>
+      </div>
+    </div>
+  </div>

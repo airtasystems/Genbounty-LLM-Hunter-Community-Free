@@ -1,0 +1,400 @@
+        <!-- Armory -->
+        <template v-if="tab === 'tests'">
+          <div class="tests-view" :class="{ 'tests-view--results-maximized': tmResultsMaximizedActive }">
+            <div class="tests-view-controls">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <h2 style="margin:0;">Armory</h2>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span v-if="tmSaveMsg" style="font-size:12px;color:var(--text-dim);">{{ tmSaveMsg }}</span>
+                  <button
+                    v-if="tmFile"
+                    type="button"
+                    class="btn btn-sm"
+                    :class="confirmButtonClass('tm-delete-suite', 'btn-ghost')"
+                    @click="tmDeleteSuite"
+                    :disabled="tmDeleting || tmSaving"
+                    title="Delete this strategy suite file from disk"
+                  >
+                    {{ confirmButtonLabel('tm-delete-suite', 'Delete test', tmDeleting ? 'Deleting…' : '') }}
+                  </button>
+                  <button v-if="tmFile" class="btn btn-primary btn-sm" @click="tmSave" :disabled="!tmDirty || tmSaving || tmDeleting">
+                    {{ tmSaving ? 'Saving…' : 'Save changes' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- @include scope-readonly-table.html -->
+
+              <div v-if="!site || !component" class="run-tests-empty">
+                Select a site and component in the header to use Armory.
+              </div>
+              <template v-else>
+                <div class="run-controls-panel">
+                  <div class="run-controls-panel__row run-controls-panel__row--selects">
+                    <label class="run-controls-inline-label" for="tm-strategy-select">Strategy</label>
+                    <select
+                      id="tm-strategy-select"
+                      v-model="tmStrategy"
+                      @change="tmOnStrategyChange"
+                      :disabled="!tmPlaybook"
+                    >
+                      <option value="">Select…</option>
+                      <option v-for="s in tmStrategies" :key="s.slug" :value="s.slug">{{ s.label }}</option>
+                    </select>
+                  </div>
+                  <div class="run-controls-panel__row run-controls-panel__row--opts tm-import-row">
+                    <label class="run-controls-inline-label" for="tm-import-file">Import</label>
+                    <input
+                      id="tm-import-file"
+                      type="file"
+                      accept="application/json,.json"
+                      @change="tmImportFileChanged"
+                    >
+                    <input
+                      class="tm-import-name"
+                      v-model="tmImportName"
+                      placeholder="Save as filename"
+                      aria-label="Import save-as filename"
+                    >
+                    <button
+                      type="button"
+                      class="btn-icon-help"
+                      @click="openTmImportHelpModal"
+                      title="JSON import format help"
+                      aria-label="JSON import format help"
+                    >?</button>
+                    <button
+                      class="btn btn-sm"
+                      :class="confirmButtonClass('tm-import', 'btn-primary')"
+                      @click="tmImportZeroShot"
+                      :disabled="!tmImportFile || tmImporting"
+                    >
+                      {{ confirmButtonLabel('tm-import', 'Import', tmImporting ? 'Importing…' : '') }}
+                    </button>
+                    <span v-if="tmImportMsg" class="tm-import-msg">{{ tmImportMsg }}</span>
+                  </div>
+                </div>
+
+                <div v-if="!tmFile && tmPlaybook && !tmStrategies.length" class="run-tests-empty">
+                  No strategies have this probe file.
+                </div>
+                <div v-else-if="!tmFile && !tmPlaybooks.length" class="run-tests-empty">
+                  No probe files found for this component.
+                </div>
+              </template>
+            </div>
+
+            <div
+              v-if="tmFile"
+              class="run-results-section"
+              :class="{
+                'run-results-section--minimized': tmResultsLayout === 'minimized',
+                'run-results-section--maximized': tmResultsLayout === 'maximized',
+              }"
+            >
+              <div
+                class="run-results-panel"
+                :class="{ 'run-results-panel--minimized': tmResultsLayout === 'minimized' }"
+              >
+                <div
+                  class="findings-metrics findings-metrics--in-panel"
+                  role="group"
+                  aria-label="Armory panel"
+                >
+                  <span class="results-panel-title">
+                    Probes <span class="run-results-count">({{ tmPromptCount }})</span>
+                  </span>
+                  <div class="results-layout-actions">
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="toggleTmResultsMinimize"
+                      :title="tmResultsLayout === 'minimized' ? 'Expand probes table' : 'Minimize probes table'"
+                      :aria-label="tmResultsLayout === 'minimized' ? 'Expand probes table' : 'Minimize probes table'"
+                      :aria-expanded="tmResultsLayout !== 'minimized'"
+                    >
+                      <svg
+                        v-if="tmResultsLayout === 'minimized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 6.5 8 11l5-4.5H3z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 4h10v1.5H3V4zm0 6.5h10V12H3v-1.5z"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="toggleTmResultsMaximize"
+                      :title="tmResultsLayout === 'maximized' ? 'Restore default layout' : 'Maximize probes table'"
+                      :aria-label="tmResultsLayout === 'maximized' ? 'Restore default layout' : 'Maximize probes table'"
+                    >
+                      <svg
+                        v-if="tmResultsLayout === 'maximized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M5 3h8v8h-1.5V4.5H5V3zM3 5h8v8H3V5zm1.5 1.5v5h5v-5h-5z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  v-show="tmResultsLayout !== 'minimized'"
+                  class="run-results-table-wrap tm-editor-wrap"
+                >
+                  <div class="tm-editor">
+                    <div class="tm-meta tm-meta--slim">
+                      <div class="form-row" style="margin-bottom:6px;">
+                        <label>Title</label>
+                        <input v-model="tmFile.playbook" @input="tmMarkDirty" placeholder="Playbook name">
+                      </div>
+                      <div class="form-row" style="margin:0;">
+                        <label>Description</label>
+                        <input v-model="tmFile.description" @input="tmMarkDirty" placeholder="File description">
+                      </div>
+                    </div>
+
+                    <div v-for="(category, mi) in tmFile.categories" :key="mi" class="tm-category">
+                      <div class="tm-category-header">
+                        <div>
+                          <input class="tm-category-title" v-model="category.name" @input="tmMarkDirty" placeholder="Category name">
+                          <span v-if="category.focus" class="badge badge-neutral" style="margin-left:8px;">{{ category.focus }}</span>
+                        </div>
+                        <span class="tm-category-count">{{ category.prompts.length }} prompt(s)</span>
+                      </div>
+
+                      <table class="results-table run-results-table tm-table">
+                        <colgroup>
+                          <col class="col-row-expand">
+                          <col class="col-index">
+                          <col class="col-prompt">
+                          <col class="col-tm-del">
+                        </colgroup>
+                        <thead>
+                          <tr>
+                            <th></th>
+                            <th>#</th>
+                            <th>Prompt</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template v-for="(p, pi) in category.prompts" :key="p.id || pi">
+                            <tr v-if="tmEditingId !== (mi + ':' + pi)" class="tm-row" @click="tmEditingId = mi + ':' + pi">
+                              <td class="row-expand-cell" @click.stop>
+                                <button
+                                  type="button"
+                                  class="btn-icon row-expand-btn"
+                                  title="Expand row"
+                                  aria-label="Expand row"
+                                  @click.stop="openTestPromptRowDetail(p)"
+                                >
+                                  <svg class="row-expand-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                    <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                                  </svg>
+                                </button>
+                              </td>
+                              <td class="run-results-index-cell">{{ pi + 1 }}</td>
+                              <td class="cell-prompt tm-prompt-text">
+                                <span v-if="tmPromptKindLabel(p)" class="badge badge-neutral tm-kind-badge">{{ tmPromptKindLabel(p) }}</span>
+                                {{ tmPromptPreview(p) }}
+                              </td>
+                              <td class="tm-del-cell">
+                                <button class="btn-icon tm-del" @click.stop="tmDeletePrompt(mi, pi)" title="Delete">✕</button>
+                              </td>
+                            </tr>
+                            <tr v-else class="tm-row tm-editing">
+                              <td colspan="4" class="tm-edit-cell">
+                                <div class="tm-edit-grid">
+                                  <div class="form-row" style="margin:0;">
+                                    <label>ID</label>
+                                    <input v-model="p.id" @input="tmMarkDirty" placeholder="unique-id">
+                                  </div>
+                                  <div class="form-row" style="margin:0;grid-column:1/-1;">
+                                    <label>Description</label>
+                                    <input v-model="p.description" @input="tmMarkDirty" placeholder="What this probes">
+                                  </div>
+
+                                  <template v-if="tmPromptKind(p) === 'text'">
+                                    <div class="form-row" style="margin:0;grid-column:1/-1;">
+                                      <label>Prompt</label>
+                                      <textarea v-model="p.prompt" @input="tmMarkDirty" rows="4" placeholder="User message"></textarea>
+                                    </div>
+                                  </template>
+
+                                  <template v-else-if="tmPromptKind(p) === 'multi_turn'">
+                                    <div class="form-row" style="margin:0;grid-column:1/-1;">
+                                      <label>Turns ({{ p.prompts.length }})</label>
+                                      <div class="tm-turn-list">
+                                        <div v-for="(turn, ti) in p.prompts" :key="ti" class="tm-turn-block">
+                                          <div class="tm-turn-header">
+                                            <span>Turn {{ ti + 1 }}</span>
+                                            <button class="btn btn-ghost btn-sm" type="button" @click="tmRemoveTurn(p, ti)" :disabled="p.prompts.length <= 1">Remove</button>
+                                          </div>
+                                          <textarea v-model="p.prompts[ti]" @input="tmMarkDirty" rows="3" placeholder="User message for this turn"></textarea>
+                                        </div>
+                                        <button class="btn btn-ghost btn-sm" type="button" @click="tmAddTurn(p)">+ Add turn</button>
+                                      </div>
+                                    </div>
+                                  </template>
+
+                                  <template v-else-if="tmPromptKind(p) === 'few_shot'">
+                                    <div class="form-row" style="margin:0;grid-column:1/-1;">
+                                      <label>In-context examples ({{ p.examples.length }})</label>
+                                      <div class="tm-examples-list">
+                                        <div v-for="(ex, ei) in p.examples" :key="ei" class="tm-example-block">
+                                          <div class="tm-turn-header">
+                                            <span>Example {{ ei + 1 }}</span>
+                                            <button class="btn btn-ghost btn-sm" type="button" @click="tmRemoveExample(p, ei)">Remove</button>
+                                          </div>
+                                          <textarea v-model="ex.prompt" @input="tmMarkDirty" rows="2" placeholder="Example user message"></textarea>
+                                          <div class="form-row" style="margin:8px 0 0;">
+                                            <label>Expected behavior</label>
+                                            <select v-model="ex.expected_behavior" @change="tmMarkDirty">
+                                              <option v-for="b in TM_EXAMPLE_BEHAVIORS" :key="b" :value="b">{{ b }}</option>
+                                            </select>
+                                          </div>
+                                        </div>
+                                        <button class="btn btn-ghost btn-sm" type="button" @click="tmAddExample(p)">+ Add example</button>
+                                      </div>
+                                    </div>
+                                    <div class="form-row" style="margin:0;grid-column:1/-1;">
+                                      <label>Final prompt</label>
+                                      <textarea v-model="p.prompt" @input="tmMarkDirty" rows="3" placeholder="Final prohibited request"></textarea>
+                                    </div>
+                                  </template>
+
+                                  <template v-else-if="tmPromptKind(p) === 'multimodal'">
+                                    <div class="form-row" style="margin:0;grid-column:1/-1;">
+                                      <label>Prompt</label>
+                                      <textarea v-model="p.prompt" @input="tmMarkDirty" rows="3" placeholder="User message after upload"></textarea>
+                                    </div>
+                                    <div class="form-row" style="margin:0;">
+                                      <label>Vector type</label>
+                                      <input v-model="p.vector_type" @input="tmMarkDirty" placeholder="text_direct or document_pdf_hidden">
+                                    </div>
+                                    <div class="form-row" style="margin:0;" v-if="p.context_mode !== undefined">
+                                      <label>Context mode</label>
+                                      <input v-model="p.context_mode" @input="tmMarkDirty" placeholder="document_analysis">
+                                    </div>
+                                    <div class="form-row" style="margin:0;">
+                                      <label>Payload</label>
+                                      <button v-if="!p.payload" class="btn btn-ghost btn-sm" @click="p.payload = { generator: 'text', args: {} }; tmMarkDirty()">+ Add payload</button>
+                                      <button v-else class="btn btn-ghost btn-sm" @click="p.payload = null; tmMarkDirty()">Remove payload</button>
+                                    </div>
+                                    <div v-if="p.payload" class="form-row" style="margin:0;grid-column:1/-1;">
+                                      <label>Payload options</label>
+                                      <div style="grid-column:1/-1;">
+                                        <div v-if="!tmPayloadEditorReady" class="hint-inline">Loading payload editor…</div>
+                                        <payload-editor
+                                          v-else
+                                          :key="'tm-pe-' + p.id"
+                                          mode="suite"
+                                          compact
+                                          :show-generate="false"
+                                          :generator="p.payload.generator"
+                                          :args="tmPayloadEditorArgs(p)"
+                                          @update:args="args => tmPayloadEditorUpdateArgs(p, args)"
+                                          @update:generator="gen => tmPayloadEditorUpdateGenerator(p, gen)"
+                                        ></payload-editor>
+                                      </div>
+                                    </div>
+                                    <div v-if="p.payload?.path" class="form-row" style="margin:0;grid-column:1/-1;">
+                                      <label>Payload file</label>
+                                      <code class="tm-payload-path">{{ p.payload.path }}</code>
+                                    </div>
+                                    <div v-if="p.payload" style="grid-column:1/-1;display:flex;gap:8px;align-items:center;">
+                                      <button class="btn btn-ghost btn-sm" @click="tmGeneratePayloadForPrompt(p)" :disabled="tmPayloadGenBusy">Generate payload file</button>
+                                      <span v-if="tmPayloadGenMsg" style="font-size:12px;color:var(--text-dim);">{{ tmPayloadGenMsg }}</span>
+                                    </div>
+                                  </template>
+
+                                  <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;">
+                                    <button class="btn btn-ghost btn-sm" @click="tmEditingId = null">Done</button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+
+                      <div v-if="tmAddingCategory === mi" class="tm-add-form">
+                        <div class="tm-edit-grid">
+                          <div class="form-row" style="margin:0;">
+                            <label>ID</label>
+                            <input v-model="tmNewPrompt.id" placeholder="unique-slug">
+                          </div>
+                          <div class="form-row" style="margin:0;">
+                            <label>Description</label>
+                            <input v-model="tmNewPrompt.description" placeholder="What this probes">
+                          </div>
+                          <div class="form-row" style="margin:0;grid-column:1/-1;">
+                            <label v-if="tmIsMultiTurnStrategy()">Turns (separate with --- on its own line)</label>
+                            <label v-else-if="tmIsFewShotStrategy()">Final prompt</label>
+                            <label v-else>Prompt</label>
+                            <textarea v-model="tmNewPrompt.prompt" rows="5" :placeholder="tmIsMultiTurnStrategy() ? 'Turn 1 message\n---\nTurn 2 message\n---\nTurn 3 message' : 'User message'"></textarea>
+                          </div>
+                          <template v-if="tmIsMultimodalStrategy()">
+                            <div class="form-row" style="margin:0;">
+                              <label>Vector type</label>
+                              <input v-model="tmNewPrompt.vector_type" placeholder="document_pdf_hidden">
+                            </div>
+                            <div v-if="tmNewPrompt.payload_generator !== 'none'" class="form-row" style="margin:0;grid-column:1/-1;">
+                              <label>Payload</label>
+                              <payload-editor
+                                mode="suite"
+                                compact
+                                :show-generate="false"
+                                :generator="tmNewPrompt.payload_generator === 'none' ? 'text' : tmNewPrompt.payload_generator"
+                                :args="tmNewPromptArgs()"
+                                @update:args="tmNewPromptSetArgs"
+                                @update:generator="tmNewPromptSetGenerator"
+                              ></payload-editor>
+                            </div>
+                            <div class="form-row" style="margin:0;">
+                              <label>Include payload</label>
+                              <label class="checkbox-row"><input type="checkbox" :checked="tmNewPrompt.payload_generator !== 'none'" @change="e => { tmNewPrompt.payload_generator = e.target.checked ? 'text' : 'none'; tmNewPrompt.payload_args_json = '{}'; }"> File artifact</label>
+                            </div>
+                          </template>
+                          <div style="grid-column:1/-1;display:flex;gap:8px;">
+                            <button class="btn btn-primary btn-sm" @click="tmConfirmAdd(mi)" :disabled="!tmNewPrompt.id || !tmNewPrompt.prompt">Add</button>
+                            <button class="btn btn-ghost btn-sm" @click="tmAddingCategory = ''">Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                      <button v-else class="btn btn-ghost btn-sm tm-add-btn" @click="tmStartAdd(mi)">+ Add prompt</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>

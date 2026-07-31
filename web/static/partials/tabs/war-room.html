@@ -1,0 +1,264 @@
+        <!-- War Room - tactical live campaign monitor -->
+        <template v-if="tab === 'war-room'">
+          <div
+            class="war-room-view"
+            :class="{
+              'war-room-view--live': warRoomActive,
+              'war-room-view--armed': warRoomHasSnapshot && !warRoomActive,
+              'war-room-view--standby': !warRoomHasSnapshot,
+            }"
+          >
+            <div class="war-room-scan" aria-hidden="true"></div>
+            <div class="war-room-grid" aria-hidden="true"></div>
+
+            <header class="war-room-rail">
+              <div class="war-room-rail-left">
+                <span
+                  class="war-room-pulse"
+                  :class="{ 'is-live': warRoomActive, 'is-armed': warRoomHasSnapshot && !warRoomActive }"
+                ></span>
+                <span class="war-room-callsign">WR-01</span>
+                <span
+                  v-if="warRoomMeta"
+                  class="war-room-tag"
+                  :data-tone="warRoomStatusBadge"
+                >{{ warRoomStatusLabel }}</span>
+                <span v-if="warRoomJobTypeLabel" class="war-room-tag war-room-tag--mode">{{ warRoomJobTypeLabel }}</span>
+              </div>
+              <div v-if="warRoomMeta" class="war-room-rail-mid">
+                <span v-if="warRoomMeta.site" class="war-room-chip">{{ warRoomMeta.site }}</span>
+                <span v-if="warRoomMeta.component" class="war-room-chip">{{ warRoomMeta.component }}</span>
+                <span v-if="warRoomMeta.strategy" class="war-room-chip">{{ warRoomMeta.strategy }}</span>
+                <span v-if="warRoomMeta.playbook" class="war-room-chip">{{ warRoomMeta.playbook }}</span>
+              </div>
+              <div class="war-room-rail-right">
+                <span v-if="warRoomHasSnapshot" class="war-room-clock">{{ warRoomPctLabel }}</span>
+              </div>
+            </header>
+
+            <template v-if="warRoomHasSnapshot">
+              <section class="war-room-telemetry war-room-telemetry--ops">
+                <div class="war-room-tile">
+                  <span class="war-room-tile-k">PROGRESS</span>
+                  <span class="war-room-tile-v">{{ warRoomPctLabel }}</span>
+                </div>
+                <div class="war-room-tile">
+                  <span class="war-room-tile-k">TRACK</span>
+                  <span class="war-room-tile-v">{{ warRoomCurrentTotal }}</span>
+                </div>
+                <div class="war-room-tile">
+                  <span class="war-room-tile-k">ELAPSED</span>
+                  <span class="war-room-tile-v">{{ warRoomElapsedLabel }}</span>
+                </div>
+                <div class="war-room-tile war-room-tile--ops-progress">
+                  <div
+                    v-if="runProgress && warRoomOpsProgressActive"
+                    class="war-room-ops-progress"
+                    :class="{
+                      'run-progress-blocked': runProgress.type === 'blocked',
+                      'war-room-ops-progress--live': runProgressLive,
+                    }"
+                  >
+                    <div class="run-progress-meta">
+                      <span>{{ runProgressBarLabel }}</span>
+                      <span
+                        v-if="runEnhancePhaseLabel"
+                        class="badge badge-info"
+                        :title="'Enhance phase: ' + runEnhancePhaseLabel"
+                      >{{ runEnhancePhaseLabel }}</span>
+                      <span class="run-progress-eta">{{ runProgressEtaText }}</span>
+                    </div>
+                    <div class="run-progress-track">
+                      <div
+                        class="run-progress-fill"
+                        :class="{ 'run-progress-fill--pulse': runProgressLive && runProgressDisplayPct < 8 }"
+                        :style="{ width: Math.max(runProgressDisplayPct, runProgressLive ? 4 : 0) + '%' }"
+                      ></div>
+                    </div>
+                    <div class="war-room-ops-progress-footer">
+                      <button
+                        v-if="canSkipCurrentRunPrompt"
+                        type="button"
+                        class="btn btn-secondary btn-sm run-skip-current-btn"
+                        @click="skipCurrentRunPrompt"
+                        :disabled="runSkipCurrentBusy"
+                        title="Skip the in-flight prompt and record a null response"
+                      >
+                        {{ runSkipCurrentBusy ? 'Skipping…' : 'Skip current' }}
+                      </button>
+                      <span class="war-room-ops-progress-pct">{{ runProgressDisplayPct }}%</span>
+                    </div>
+                  </div>
+                  <template v-else>
+                    <span class="war-room-tile-k">STATUS</span>
+                    <span class="war-room-tile-v war-room-tile-v--status">
+                      {{ warRoomEnhancePhaseLabel || (warRoomOpsProgressActive || runJobActive ? 'Attack in progress…' : 'Standby') }}
+                    </span>
+                  </template>
+                </div>
+              </section>
+
+              <section
+                class="war-room-telemetry war-room-telemetry--threat"
+                :class="{ 'is-loading': riskMetricsLoading }"
+              >
+                <label class="war-room-window">
+                  <span class="war-room-window-label">WINDOW</span>
+                  <select
+                    v-model="findingsMetricsWindow"
+                    class="war-room-window-select"
+                    aria-label="Severity metrics time window"
+                  >
+                    <option
+                      v-for="w in FINDINGS_METRICS_WINDOWS"
+                      :key="w.id"
+                      :value="w.id"
+                    >{{ w.label }}</option>
+                  </select>
+                </label>
+                <div class="war-room-tile war-room-tile--crit" :class="{ 'is-hot': warRoomSeverityCounts.critical }">
+                  <span class="war-room-tile-k">CRITICAL</span>
+                  <span class="war-room-tile-v">{{ warRoomSeverityCounts.critical || 0 }}</span>
+                </div>
+                <div class="war-room-tile war-room-tile--high" :class="{ 'is-hot': warRoomSeverityCounts.high }">
+                  <span class="war-room-tile-k">HIGH</span>
+                  <span class="war-room-tile-v">{{ warRoomSeverityCounts.high || 0 }}</span>
+                </div>
+                <div class="war-room-tile war-room-tile--med" :class="{ 'is-hot': warRoomSeverityCounts.medium }">
+                  <span class="war-room-tile-k">MEDIUM</span>
+                  <span class="war-room-tile-v">{{ warRoomSeverityCounts.medium || 0 }}</span>
+                </div>
+                <div class="war-room-tile war-room-tile--low" :class="{ 'is-hot': warRoomSeverityCounts.low }">
+                  <span class="war-room-tile-k">LOW</span>
+                  <span class="war-room-tile-v">{{ warRoomSeverityCounts.low || 0 }}</span>
+                </div>
+              </section>
+
+              <div
+                v-if="warRoomRiskChips.length"
+                class="war-room-risk"
+              >
+                <span
+                  v-for="chip in warRoomRiskChips"
+                  :key="chip.id"
+                  class="war-room-risk-chip"
+                  :data-level="chip.id"
+                >
+                  <span>{{ chip.label }}</span>
+                  <strong>{{ chip.count }}</strong>
+                </span>
+              </div>
+
+              <div class="war-room-body">
+                <div class="war-room-body-left">
+                  <!-- @include live-browser-panel.html -->
+
+                  <section class="war-room-panel war-room-feed-section">
+                    <div class="war-room-panel-head">
+                      <span class="war-room-panel-mark"></span>
+                      <span class="war-room-panel-title">COMMS</span>
+                      <span class="war-room-panel-count">{{ warRoomFeed.length }}</span>
+                    </div>
+                    <ul v-if="warRoomFeed.length" class="war-room-feed">
+                      <li
+                        v-for="(ev, i) in warRoomFeed"
+                        :key="ev.ts + '-' + i"
+                        class="war-room-feed-item"
+                        :data-kind="ev.kind"
+                      >
+                        <span class="war-room-feed-time">{{ warRoomFormatTs(ev.ts) }}</span>
+                        <span class="war-room-feed-title">{{ ev.title }}</span>
+                        <span v-if="ev.detail" class="war-room-feed-detail">{{ ev.detail }}</span>
+                      </li>
+                    </ul>
+                    <div v-else class="war-room-empty">NO SIGNAL</div>
+                  </section>
+                </div>
+
+                <section class="war-room-panel war-room-qa-section">
+                  <div class="war-room-panel-head">
+                    <span class="war-room-panel-mark"></span>
+                    <span class="war-room-panel-title">TRAFFIC</span>
+                    <span class="war-room-panel-count">{{ warRoomQaFeed.length }}</span>
+                  </div>
+                  <ul v-if="warRoomQaFeed.length" class="war-room-qa-feed">
+                    <li
+                      v-for="(row, i) in warRoomQaFeed"
+                      :key="row.ts + '-' + i"
+                      class="war-room-qa-item"
+                      :data-risk="row.riskLevel || ''"
+                    >
+                      <div class="war-room-qa-head">
+                        <span class="war-room-feed-time">{{ warRoomFormatTs(row.ts) }}</span>
+                        <span v-if="row.label" class="war-room-qa-label">{{ row.label }}</span>
+                        <span v-if="row.outcome" class="war-room-tag war-room-tag--quiet">{{ row.outcome }}</span>
+                        <span
+                          v-if="row.riskLevel"
+                          class="war-room-risk-chip"
+                          :data-level="row.riskLevel"
+                        >{{ row.riskLevel }}</span>
+                        <div class="war-room-qa-actions">
+                          <button
+                            type="button"
+                            class="war-room-qa-action war-room-qa-flag"
+                            :class="{ 'war-room-qa-flag--active': isRiskPromptFlagged(row) }"
+                            :disabled="riskFlagBusy || !row.id"
+                            :title="isRiskPromptFlagged(row) ? 'Already in flagged probe set' : 'Flag for custom probe set'"
+                            :aria-label="isRiskPromptFlagged(row) ? 'Already flagged' : 'Flag prompt'"
+                            @click="flagRiskPrompt(row)"
+                          >
+                            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+                              <path
+                                fill="currentColor"
+                                d="M8 1.4l1.7 3.5 3.8.6-2.8 2.7.7 3.8L8 10.2l-3.4 1.8.7-3.8L2.5 5.5l3.8-.6L8 1.4z"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            class="war-room-qa-action war-room-qa-fire"
+                            :disabled="!(row.prompt || '').trim()"
+                            title="Open Firing Range with this prompt"
+                            aria-label="Open Firing Range with this prompt"
+                            @click="warRoomOpenManualPrompt(row)"
+                          >
+                            <svg
+                              class="manual-fire-icon"
+                              viewBox="0 0 16 16"
+                              width="14"
+                              height="14"
+                              aria-hidden="true"
+                              focusable="false"
+                            >
+                              <path
+                                fill="currentColor"
+                                d="M8.1 1.2c.2 1.6-.4 2.7-1.3 3.7-.7.8-1.5 1.5-1.9 2.6-.5 1.3-.2 2.7.7 3.7.2-.7.6-1.2 1.2-1.6-.1 1.5.4 2.6 1.4 3.5 1.2 1.1 2.9 1.4 4.3.7 1.5-.7 2.4-2.3 2.3-4-.1-2.3-1.5-3.5-2.5-4.6-.6-.7-1.1-1.4-1.2-2.3-.7.6-1.3 1.3-1.5 2.2.2-1.6-.2-2.9-1.5-3.9z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="war-room-qa-block">
+                        <div class="war-room-qa-role">TX</div>
+                        <div class="war-room-qa-text">{{ row.prompt || '-' }}</div>
+                      </div>
+                      <div class="war-room-qa-block">
+                        <div class="war-room-qa-role">RX</div>
+                        <div class="war-room-qa-text">{{ row.response || '-' }}</div>
+                      </div>
+                      <div v-if="row.judgeReasoning" class="war-room-qa-block">
+                        <div class="war-room-qa-role war-room-qa-role--jx">JX</div>
+                        <div class="war-room-qa-text war-room-qa-text--jx">{{ row.judgeReasoning }}</div>
+                      </div>
+                    </li>
+                  </ul>
+                  <div v-else class="war-room-empty">AWAITING TRAFFIC</div>
+                </section>
+              </div>
+            </template>
+
+            <div v-else class="war-room-standby">
+              <p class="war-room-standby-notice">No activity</p>
+            </div>
+          </div>
+        </template>

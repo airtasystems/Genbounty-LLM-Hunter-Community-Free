@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genbounty LLM Hunter</title>
+<link rel="icon" href="/img/Genbounty.png" sizes="any">
+<link rel="icon" type="image/png" href="/img/Genbounty.png">
+<link rel="apple-touch-icon" href="/img/Genbounty.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Share+Tech+Mono&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+  <!-- @include modals.html -->
+  <!-- @include header.html -->
+
+  <!-- Body -->
+  <div class="app-body app-body-three-col">
+    <!-- Sidebar: Ops menu -->
+    <nav
+      class="sidebar"
+      :style="{ '--sidebar-width': sidebarWidthPx }"
+    >
+      <div
+        class="sidebar-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Ops column"
+        title="Drag to widen Ops"
+        tabindex="0"
+        @pointerdown.prevent="startSidebarResize"
+        @keydown="onSidebarResizeKeydown"
+      ></div>
+      <div
+        class="sidebar-mission"
+        aria-label="Ops"
+        title="Show or hide the menu"
+      >
+        <div
+          class="sidebar-panel-header"
+          role="button"
+          tabindex="0"
+          :aria-expanded="sidebarMenuOpen ? 'true' : 'false'"
+          @click="toggleSidebarMenu"
+          @keydown.enter.prevent="toggleSidebarMenu"
+          @keydown.space.prevent="toggleSidebarMenu"
+        >
+          <div class="sidebar-panel-header-text">
+            <span class="sidebar-panel-title">Ops</span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm sidebar-panel-max-btn"
+            @click.stop="toggleSidebarMenu"
+            :aria-pressed="sidebarMenuOpen ? 'true' : 'false'"
+            :aria-label="sidebarMenuOpen ? 'Minimize Ops' : 'Maximize Ops'"
+            :title="sidebarMenuOpen ? 'Minimize' : 'Maximize'"
+          >
+            <svg v-if="!sidebarMenuOpen" class="sidebar-panel-max-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+            </svg>
+            <svg v-else class="sidebar-panel-max-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M2 7h12v2H2z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div v-show="sidebarMenuOpen" class="sidebar-menu">
+        <div
+          v-for="g in sidebarGroups"
+          :key="g.id"
+          class="sidebar-nav-group"
+          :class="{
+            'sidebar-nav-group--open': isSidebarGroupOpen(g),
+            'sidebar-nav-group--active': activeSidebarGroupId === g.id,
+          }"
+        >
+          <div
+            class="sidebar-panel-header"
+            role="button"
+            tabindex="0"
+            @click="toggleSidebarGroup(g)"
+            @keydown.enter.prevent="toggleSidebarGroup(g)"
+            @keydown.space.prevent="toggleSidebarGroup(g)"
+          >
+            <div class="sidebar-panel-header-text">
+              <span class="sidebar-panel-title">{{ g.label }}</span>
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm sidebar-panel-max-btn"
+              @click.stop="toggleSidebarGroup(g)"
+              :aria-pressed="isSidebarGroupOpen(g) ? 'true' : 'false'"
+              :aria-label="isSidebarGroupOpen(g) ? ('Minimize ' + g.label) : ('Maximize ' + g.label)"
+              :title="isSidebarGroupOpen(g) ? 'Minimize' : 'Maximize'"
+            >
+              <svg v-if="!isSidebarGroupOpen(g)" class="sidebar-panel-max-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+              </svg>
+              <svg v-else class="sidebar-panel-max-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M2 7h12v2H2z"/>
+              </svg>
+            </button>
+          </div>
+          <div v-show="isSidebarGroupOpen(g)" class="sidebar-nav">
+            <button
+              v-for="t in g.tabs"
+              :key="t.id"
+              type="button"
+              :class="{ active: tab === t.id }"
+              @click.stop="selectSidebarTab(t.id)"
+            >{{ t.label }}</button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <div class="main">
+      <div class="view" :class="{ 'view--run': tab === 'run', 'view--war-room': tab === 'war-room', 'view--risk': tab === 'risk', 'view--manual': tab === 'manual', 'view--notes': tab === 'notes', 'view--tests': tab === 'tests', 'view--generate': tab === 'generate', 'view--payloads': tab === 'payloads', 'view--export': tab === 'export', 'view--playbooks': tab === 'playbooks' }">
+
+        <!-- @include tabs/recon.html -->
+        <!-- @include tabs/intel.html -->
+        <!-- @include tabs/generate.html -->
+        <!-- @include tabs/playbooks.html -->
+        <!-- @include tabs/payloads.html -->
+        <!-- @include tabs/discover.html -->
+        <!-- @include tabs/run.html -->
+        <!-- @include tabs/war-room.html -->
+        <!-- @include tabs/tests.html -->
+        <!-- @include tabs/risk.html -->
+        <!-- @include tabs/manual.html -->
+        <!-- @include tabs/export.html -->
+        <!-- @include tabs/settings.html -->
+        <!-- @include tabs/notes.html -->
+
+      </div>
+
+      <!-- @include jobs-drawer.html -->
+    </div>
+
+    <!-- @include output-panel.html -->
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script src="/static/js/format.js"></script>
+<script src="/static/js/premium.js"></script>
+<script src="/static/js/storage.js"></script>
+<script src="/static/js/confirm.js"></script>
+<script src="/static/js/row-detail.js"></script>
+<script src="/static/js/ctx.js"></script>
+<script src="/static/js/scope.js"></script>
+<script src="/static/js/jobs.js"></script>
+<script src="/static/js/tabs/tests.js"></script>
+<script src="/static/js/tabs/playbooks.js"></script>
+<script src="/static/js/tabs/run.js"></script>
+<script src="/static/js/tabs/war-room.js"></script>
+<script src="/static/js/tabs/risk.js"></script>
+<script src="/static/js/tabs/export.js"></script>
+<script src="/static/js/tabs/settings.js"></script>
+<script src="/static/js/tabs/recon.js"></script>
+<script src="/static/js/tabs/notes.js"></script>
+<script src="/static/js/tabs/connect-target.js"></script>
+<script src="/static/js/tabs/prompt-transforms.js"></script>
+<script src="/static/js/tabs/discover.js"></script>
+<script src="/static/js/tabs/run-starters.js"></script>
+<script src="/static/js/tabs/pipeline.js"></script>
+<script src="/static/js/app-lifecycle.js"></script>
+<script src="/static/js/app-setup.js"></script>
+<script src="/static/payload-editor.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

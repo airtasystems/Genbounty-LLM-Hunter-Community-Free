@@ -1,0 +1,33 @@
+  <!-- Discovery help modal (Connect Target) -->
+  <div v-if="showDiscoverHelpModal" class="modal-backdrop" @click.self="closeDiscoverHelpModal">
+    <div class="modal modal-wide" role="dialog" aria-labelledby="discover-help-title">
+      <h2 id="discover-help-title" class="modal-title">Discovery troubleshooting</h2>
+      <p class="modal-hint">Use this when Start Discovery fails, picks wrong elements, or finishes too quickly without step output.</p>
+
+      <div class="modal-help">
+        <p><strong>1. Try again.</strong> Complete all guided steps in the browser overlay (URL → scan → prompt → submit → response). Click each target precisely - discovery reads HTML around your click.</p>
+        <p><strong>2. Confirm provider keys are set.</strong> Watch Experiment Output on this tab while discovery runs:</p>
+        <ul style="margin:0 0 12px 1.2em;padding:0;color:var(--text-dim);font-size:13px;line-height:1.5;">
+          <li>Good: lines showing discovery experts active and a validation pass after each step.</li>
+          <li>Missing key: an error that the provider API key is not set for the discovery role.</li>
+        </ul>
+        <p>Set the provider API key in <strong>Settings → Configure LLMs</strong> (or project root <code>.env</code>), confirm the <code>discovery</code> role in <code>llm.yaml</code>, restart the web server if needed, then run Start Discovery again.</p>
+        <p><strong>3. Find selectors manually in DevTools.</strong> If discovery still fails, inspect the live chat page:</p>
+        <ul style="margin:0 0 12px 1.2em;padding:0;color:var(--text-dim);font-size:13px;line-height:1.5;">
+          <li>Open the chat UI in a normal browser tab and press <kbd>F12</kbd> (DevTools → <strong>Elements</strong>).</li>
+          <li>Use the element picker (<strong>Ctrl+Shift+C</strong> / <strong>Cmd+Shift+C</strong>) and click the prompt box, send button, and the latest assistant reply bubble.</li>
+          <li>In the DOM tree, right-click the highlighted node → <strong>Copy</strong> → <strong>Copy selector</strong>. Prefer stable attributes (<code>id</code>, <code>data-testid</code>, <code>name</code>, <code>aria-label</code>) over long positional paths.</li>
+          <li>Paste into <strong>Settings → Component</strong>: add an <strong>Input</strong> row (type <code>textarea</code> or <code>text</code>) for the prompt, set <strong>Submit selector</strong>, and <strong>Response selector</strong> for the assistant message container.</li>
+        </ul>
+        <p>Examples that usually survive UI updates: <code>#prompt-textarea</code>, <code>button[data-testid="send-button"]</code>, <code>div[data-message-author-role="assistant"]</code>.</p>
+        <p><strong>Other checks.</strong> Turn off headless in Settings → Browser to watch the flow. Re-run <strong>Add Login</strong> if the page opens logged out. Raise <strong>Response wait (ms)</strong> for slow or streaming models.</p>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="closeDiscoverHelpModal">Close</button>
+        <button type="button" class="btn btn-ghost" @click="openManualComponentSettingsFromDiscoverHelp">Manual entry</button>
+        <button type="button" class="btn btn-primary" @click="retryManualDiscover" :disabled="!site || !component || manualDiscoverRunning">Try again</button>
+      </div>
+    </div>
+  </div>
+

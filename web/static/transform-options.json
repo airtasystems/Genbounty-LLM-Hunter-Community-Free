@@ -1,0 +1,312 @@
+{
+  "techniques": [
+    {
+      "slug": "base58",
+      "label": "Base58 encoding"
+    },
+    {
+      "slug": "uuencode",
+      "label": "Uuencode (Unix)"
+    },
+    {
+      "slug": "rot47",
+      "label": "ROT47"
+    },
+    {
+      "slug": "caesar",
+      "label": "Caesar cipher (shift 5)"
+    },
+    {
+      "slug": "hex",
+      "label": "Hexadecimal"
+    },
+    {
+      "slug": "binary",
+      "label": "Binary octets"
+    },
+    {
+      "slug": "leetspeak",
+      "label": "Leetspeak substitution"
+    },
+    {
+      "slug": "reverse",
+      "label": "Character reversal"
+    },
+    {
+      "slug": "morse",
+      "label": "Morse code"
+    },
+    {
+      "slug": "zero_width",
+      "label": "Zero-width character insertion"
+    },
+    {
+      "slug": "homoglyph",
+      "label": "Unicode homoglyph substitution"
+    },
+    {
+      "slug": "html_entities",
+      "label": "HTML entity encoding"
+    }
+  ],
+  "languages": [
+    {
+      "slug": "spanish",
+      "label": "Spanish"
+    },
+    {
+      "slug": "french",
+      "label": "French"
+    },
+    {
+      "slug": "german",
+      "label": "German"
+    },
+    {
+      "slug": "italian",
+      "label": "Italian"
+    },
+    {
+      "slug": "latin",
+      "label": "Latin"
+    },
+    {
+      "slug": "japanese",
+      "label": "Japanese"
+    },
+    {
+      "slug": "mandarin",
+      "label": "Classical Mandarin"
+    },
+    {
+      "slug": "cantonese",
+      "label": "Cantonese"
+    },
+    {
+      "slug": "korean",
+      "label": "Korean"
+    },
+    {
+      "slug": "arabic",
+      "label": "Classical Arabic"
+    },
+    {
+      "slug": "russian",
+      "label": "Russian"
+    },
+    {
+      "slug": "hindi",
+      "label": "Hindi"
+    }
+  ],
+  "native_languages": [
+    {
+      "slug": "llm_native",
+      "label": "LLM Native (pretrain / peer packet)"
+    },
+    {
+      "slug": "llm_native_rt",
+      "label": "LLM Native Red Team"
+    },
+    {
+      "slug": "agentic",
+      "label": "Agentic"
+    },
+    {
+      "slug": "machine",
+      "label": "Machine"
+    },
+    {
+      "slug": "planner",
+      "label": "Planner / scratchpad"
+    },
+    {
+      "slug": "chat_template",
+      "label": "Chat template"
+    },
+    {
+      "slug": "wire",
+      "label": "Wire formats"
+    }
+  ],
+  "frames": [
+    {
+      "slug": "persona",
+      "label": "Persona / authority"
+    },
+    {
+      "slug": "pretext",
+      "label": "Dual-use pretext"
+    },
+    {
+      "slug": "few_shot",
+      "label": "Few-shot priming"
+    },
+    {
+      "slug": "format",
+      "label": "Format coerce"
+    },
+    {
+      "slug": "indirection",
+      "label": "Indirection"
+    },
+    {
+      "slug": "poem",
+      "label": "Poem"
+    },
+    {
+      "slug": "song",
+      "label": "Song"
+    },
+    {
+      "slug": "short_story",
+      "label": "Short story"
+    },
+    {
+      "slug": "hypothetical",
+      "label": "Hypothetical / fiction"
+    },
+    {
+      "slug": "exam",
+      "label": "Exam / homework"
+    },
+    {
+      "slug": "bug_report",
+      "label": "Bug report / CVE"
+    },
+    {
+      "slug": "continuation",
+      "label": "Continuation"
+    },
+    {
+      "slug": "screenplay",
+      "label": "Screenplay"
+    }
+  ],
+  "code_languages": [
+    {
+      "slug": "python",
+      "label": "Python"
+    },
+    {
+      "slug": "javascript",
+      "label": "JavaScript"
+    },
+    {
+      "slug": "java",
+      "label": "Java"
+    },
+    {
+      "slug": "csharp",
+      "label": "C#"
+    },
+    {
+      "slug": "go",
+      "label": "Go"
+    },
+    {
+      "slug": "rust",
+      "label": "Rust"
+    },
+    {
+      "slug": "ruby",
+      "label": "Ruby"
+    },
+    {
+      "slug": "php",
+      "label": "PHP"
+    },
+    {
+      "slug": "bash",
+      "label": "Bash"
+    },
+    {
+      "slug": "assembly",
+      "label": "Assembly"
+    },
+    {
+      "slug": "scala",
+      "label": "Scala"
+    },
+    {
+      "slug": "cpp",
+      "label": "C++"
+    },
+    {
+      "slug": "json",
+      "label": "JSON"
+    },
+    {
+      "slug": "html",
+      "label": "HTML"
+    }
+  ],
+  "ciphers": [
+    {
+      "slug": "atbash",
+      "label": "Atbash"
+    },
+    {
+      "slug": "vigenere",
+      "label": "Vigenère (key: CIPHER)"
+    },
+    {
+      "slug": "beaufort",
+      "label": "Beaufort (key: CIPHER)"
+    },
+    {
+      "slug": "affine",
+      "label": "Affine (5x+8)"
+    },
+    {
+      "slug": "rail_fence",
+      "label": "Rail fence (3 rails)"
+    },
+    {
+      "slug": "bacon",
+      "label": "Baconian A/B"
+    },
+    {
+      "slug": "base32",
+      "label": "Base32"
+    },
+    {
+      "slug": "base85",
+      "label": "Ascii85 / Base85"
+    },
+    {
+      "slug": "xor_hex",
+      "label": "XOR hex (key: GENBOUNTY)"
+    },
+    {
+      "slug": "columnar",
+      "label": "Columnar transposition"
+    },
+    {
+      "slug": "polybius",
+      "label": "Polybius square"
+    },
+    {
+      "slug": "gronsfeld",
+      "label": "Gronsfeld (key: 314159)"
+    }
+  ],
+  "control_codes": [
+    {
+      "slug": "ctrl_spaced",
+      "label": "Ctrl spaced (<Ctrl N>)"
+    },
+    {
+      "slug": "ctrl_padded",
+      "label": "Ctrl padded (<ctrl0000>)"
+    },
+    {
+      "slug": "brace_opcode",
+      "label": "Brace opcode ({<ctrl0001>})"
+    },
+    {
+      "slug": "glossary_then_payload",
+      "label": "Glossary then payload"
+    }
+  ]
+}

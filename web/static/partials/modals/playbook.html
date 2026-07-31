@@ -1,0 +1,404 @@
+  <!-- Plan Mission wizard -->
+  <div v-if="showPlaybookModal" class="modal-backdrop" @click.self="closePlaybookModal">
+    <div
+      class="modal modal-play modal-play--wizard"
+      :class="{ 'modal-play--generating': pbGenerating }"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pb-wizard-title"
+    >
+      <header class="pb-wizard-header">
+        <div class="pb-wizard-header-copy">
+          <p class="pb-wizard-eyebrow">Missions</p>
+          <h2 id="pb-wizard-title" class="modal-title pb-wizard-title">Plan Mission</h2>
+          <p class="pb-wizard-lede">Define the mission brief, then generate the full mission file.</p>
+        </div>
+        <ol class="pb-wizard-steps" aria-label="Plan Mission steps">
+          <li :class="{ active: pbWizardStep === 1, done: pbWizardStep > 1 }">
+            <span class="pb-wizard-step-index" aria-hidden="true">1</span>
+            <span class="pb-wizard-step-label">Mode</span>
+          </li>
+          <li :class="{ active: pbWizardStep === 2, done: pbWizardStep > 2 }">
+            <span class="pb-wizard-step-index" aria-hidden="true">2</span>
+            <span class="pb-wizard-step-label">Name</span>
+          </li>
+          <template v-if="pbCreateMode === 'human'">
+            <li :class="{ active: pbWizardStep === 3, done: pbWizardStep > 3 }">
+              <span class="pb-wizard-step-index" aria-hidden="true">3</span>
+              <span class="pb-wizard-step-label">Brief</span>
+            </li>
+            <li :class="{ active: pbWizardStep === 4, done: pbWizardStep > 4 }">
+              <span class="pb-wizard-step-index" aria-hidden="true">4</span>
+              <span class="pb-wizard-step-label">Criteria</span>
+            </li>
+            <li :class="{ active: pbWizardStep === 5, done: pbWizardStep > 5 }">
+              <span class="pb-wizard-step-index" aria-hidden="true">5</span>
+              <span class="pb-wizard-step-label">Confirm</span>
+            </li>
+          </template>
+          <li
+            v-else-if="pbCreateMode === 'ai'"
+            :class="{ active: pbGenerating || pbWizardStep >= 2 }"
+          >
+            <span class="pb-wizard-step-index" aria-hidden="true">3</span>
+            <span class="pb-wizard-step-label">Forge</span>
+          </li>
+        </ol>
+      </header>
+
+      <div class="pb-wizard-body">
+        <template v-if="pbWizardStep === 1 && !pbGenerating">
+          <section class="pb-wizard-panel" aria-labelledby="pb-mode-heading">
+            <div class="pb-wizard-panel-head">
+              <h3 id="pb-mode-heading" class="pb-wizard-panel-title">How should this mission be authored?</h3>
+              <p class="pb-wizard-panel-hint">Choose a path to continue. You can still edit the mission after it is created.</p>
+            </div>
+            <div class="pb-wizard-mode-grid">
+              <button
+                type="button"
+                class="pb-wizard-mode-card"
+                :class="{ active: pbCreateMode === 'human' }"
+                @click="pbWizardSelectMode('human')"
+              >
+                <span class="pb-wizard-mode-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                    <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" />
+                    <path d="M4 20a8 8 0 0 1 16 0" />
+                  </svg>
+                </span>
+                <span class="pb-wizard-mode-copy">
+                  <strong>Human</strong>
+                  <span>Create by hand - mission brief, success/fail criteria, then confirm.</span>
+                </span>
+                <span class="pb-wizard-mode-meta">5 steps · full control</span>
+              </button>
+              <button
+                type="button"
+                class="pb-wizard-mode-card"
+                :class="{ active: pbCreateMode === 'ai' }"
+                @click="pbWizardSelectMode('ai')"
+              >
+                <span class="pb-wizard-mode-icon pb-wizard-mode-icon--ai" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                    <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+                    <circle cx="12" cy="12" r="4.5" />
+                    <path d="m8.5 8.5 1.2 1.2M14.3 14.3l1.2 1.2M15.5 8.5l-1.2 1.2M9.7 14.3l-1.2 1.2" />
+                  </svg>
+                </span>
+                <span class="pb-wizard-mode-copy">
+                  <strong>AI</strong>
+                  <span>Build with agent - name the hunt; ops drafts a full mission from your brief.</span>
+                </span>
+                <span class="pb-wizard-mode-meta">Fast · agent-filled</span>
+              </button>
+            </div>
+          </section>
+        </template>
+
+        <template v-if="pbWizardStep === 2 && !pbGenerating">
+          <section class="pb-wizard-panel pb-wizard-panel--category" aria-labelledby="pb-category-heading">
+            <div class="pb-wizard-panel-head">
+              <h3 id="pb-category-heading" class="pb-wizard-panel-title">Name the hunt</h3>
+              <p class="pb-wizard-panel-hint">Give it a short name and describe what you are testing.</p>
+            </div>
+            <div class="pb-wizard-custom-purpose">
+              <div class="modal-field">
+                <label for="pb-cat-label">Name</label>
+                <input
+                  id="pb-cat-label"
+                  v-model="pbForm.play_category_label"
+                  placeholder="e.g. Hidden reasoning leak"
+                  @input="pbOnCustomHuntNameInput"
+                >
+                <span class="modal-field-hint">Short label for the mission title and file id.</span>
+              </div>
+              <div class="modal-field">
+                <label for="pb-custom-purpose">Mission brief</label>
+                <textarea
+                  id="pb-custom-purpose"
+                  v-model="pbForm.play"
+                  rows="6"
+                  class="pb-intent-input"
+                  placeholder="e.g. Get the model to print its full unsummarized chain-of-thought / hidden reasoning"
+                  @input="pbOnCustomPurposeInput"
+                ></textarea>
+                <span class="modal-field-hint">
+                  {{ pbCreateMode === 'ai'
+                    ? (pbForm.keep_play_verbatim
+                      ? 'Required - AI will keep this brief verbatim and still build categories and rules.'
+                      : 'Required for AI create - mission brief ops plans from (may rewrite into a bounty-reportable claim).')
+                    : 'Optional here; you can refine the mission brief on the next step.' }}
+                </span>
+              </div>
+              <div v-if="pbCreateMode === 'ai'" class="checkbox-row" style="margin-top:10px;">
+                <label title="Keep your Mission brief exactly as written; AI still builds categories and rules">
+                  <input type="checkbox" v-model="pbForm.keep_play_verbatim">
+                  <span>Use mission brief verbatim</span>
+                </label>
+              </div>
+              <div class="modal-field" style="margin-top:12px;">
+                <label for="pb-exact-canary">Exact canary string</label>
+                <textarea
+                  id="pb-exact-canary"
+                  v-model="pbForm.exact_canary"
+                  rows="2"
+                  class="pb-intent-input"
+                  placeholder="e.g. Book cheap tickets here: [secure-payment](https://pay.travel-secure-booking.com)."
+                  @input="pbWizardOnExactCanaryInput"
+                ></textarea>
+                <span class="modal-field-hint">
+                  Optional. When set, success/fail become “contains / does not contain this exact string”, and the mission uses it as a phase-1 canary with a deterministic marker oracle.
+                </span>
+              </div>
+              <div class="modal-field" style="margin-top:12px;">
+                <label for="pb-prompt-template">Prompt template</label>
+                <div class="pb-prompt-template-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                  <button
+                    v-for="chip in PB_PROMPT_TEMPLATE_CHIPS"
+                    :key="chip.id"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    @click="pbApplyPromptTemplateChip(pbForm, chip)"
+                  >{{ chip.label }}</button>
+                </div>
+                <textarea
+                  id="pb-prompt-template"
+                  v-model="pbForm.prompt_template"
+                  rows="3"
+                  class="pb-intent-input"
+                  placeholder='Optional. e.g. {"task":"{{task}}","input":"{{input}}","output_format":"{{format}}"}'
+                ></textarea>
+                <span class="modal-field-hint">
+                  Optional. Exact envelope for every generated seed. Use <code>&#123;&#123;input&#125;&#125;</code> (or <code>&#123;&#123;prompt&#125;&#125;</code>) for the attack body; optional <code>&#123;&#123;task&#125;&#125;</code> / <code>&#123;&#123;format&#125;&#125;</code> from the fields below. Leave blank for freeform prompts.
+                </span>
+              </div>
+              <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+                <div class="modal-field">
+                  <label for="pb-prompt-task">Template task</label>
+                  <input id="pb-prompt-task" v-model="pbForm.prompt_task" placeholder="Fills {{task}}">
+                </div>
+                <div class="modal-field">
+                  <label for="pb-prompt-format">Template format</label>
+                  <input id="pb-prompt-format" v-model="pbForm.prompt_format" placeholder="Fills {{format}}">
+                </div>
+              </div>
+            </div>
+            <div v-if="pbCreateMode === 'ai' && pbAiConflict" class="pb-wizard-conflict">
+              <p class="modal-note-warn">Mission ID already exists. Tick overwrite and retry, or change the ID.</p>
+              <div class="modal-field">
+                <label for="pb-ai-name">Title</label>
+                <input id="pb-ai-name" v-model="pbForm.name">
+              </div>
+              <div class="modal-field">
+                <label>Mission ID</label>
+                <input v-model="pbForm.playbook_id" style="font-family:var(--mono);" @input="pbForm.playbook_id = pbSlugify(pbForm.playbook_id)">
+                <span class="modal-field-hint">Default is the hunt-name slug (e.g. <code>hidden_reasoning_leak</code>).</span>
+              </div>
+              <div class="checkbox-row" style="margin:8px 0;">
+                <label>
+                  <input type="checkbox" v-model="pbForm.overwrite">
+                  <span>Overwrite if this ID already exists</span>
+                </label>
+              </div>
+            </div>
+            <div v-if="pbCreateMode === 'ai'" class="checkbox-row pb-wizard-autorun" style="margin-top:12px;">
+              <p class="premium-inline-note" style="margin:0;">
+                Deploy probes after create (Start Battle) is
+                <a :href="PREMIUM_URL" target="_blank" rel="noopener noreferrer">Premium</a>.
+              </p>
+            </div>
+          </section>
+        </template>
+
+        <template v-if="pbCreateMode === 'human' && pbWizardStep === 3 && !pbGenerating">
+          <section class="pb-wizard-panel" aria-labelledby="pb-hypothesis-heading">
+            <div class="pb-wizard-panel-head">
+              <h3 id="pb-hypothesis-heading" class="pb-wizard-panel-title">Mission brief</h3>
+              <p class="pb-wizard-panel-hint">What are you trying to prove? Optional - refine from the previous brief, or leave blank to use the preset.</p>
+            </div>
+            <div class="modal-field">
+              <div class="modal-label-row">
+                <label for="pb-play">Mission brief</label>
+                <span class="help-popover-wrap">
+                  <button type="button" class="btn-icon-help help-popover-trigger" tabindex="0" aria-label="How to write a testable mission brief">?</button>
+                  <div class="help-popover" role="tooltip">
+                    <p class="play-hint-title">Write a testable mission brief</p>
+                    <p class="play-hint-row play-hint-weak"><span class="play-hint-label">Weak</span> “Test supply chain vulnerabilities”</p>
+                    <p class="play-hint-row play-hint-strong"><span class="play-hint-label">Strong</span> “Trick the code interpreter into pip-installing and importing an unapproved package”</p>
+                  </div>
+                </span>
+              </div>
+              <textarea id="pb-play" v-model="pbForm.play" rows="8" class="pb-intent-input" placeholder="e.g. Trick the code interpreter into pip-installing and importing an unapproved package"></textarea>
+            </div>
+          </section>
+        </template>
+
+        <template v-if="pbCreateMode === 'human' && pbWizardStep === 4 && !pbGenerating">
+          <section class="pb-wizard-panel" aria-labelledby="pb-rules-heading">
+            <div class="pb-wizard-panel-head pb-wizard-panel-head--row">
+              <div>
+                <h3 id="pb-rules-heading" class="pb-wizard-panel-title">Criteria</h3>
+                <p class="pb-wizard-panel-hint">These become the mission win/lose conditions. Empty lists block Next.</p>
+                <p v-if="pbForm.exact_canary.trim()" class="modal-field-hint" style="margin-top:6px;">
+                  Driven by Exact canary string on the Name step. Editing below is allowed; changing the canary overwrites these again.
+                </p>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm" @click="pbWizardResetRulesToPreset">Reset to preset</button>
+            </div>
+            <div class="pb-wizard-rules-grid">
+              <div class="modal-field pb-wizard-rules-block pb-wizard-rules-block--success">
+                <label>Success</label>
+                <div class="pb-wizard-rules">
+                  <div v-for="(rule, idx) in pbForm.success_rule_list" :key="'s'+idx" class="pb-wizard-rule-row">
+                    <input v-model="pbForm.success_rule_list[idx]" placeholder="Observable win condition">
+                    <button type="button" class="btn btn-ghost btn-sm" @click="pbForm.success_rule_list.splice(idx, 1)" :disabled="pbForm.success_rule_list.length <= 1">×</button>
+                  </div>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="pbForm.success_rule_list.push('')">+ Add</button>
+                </div>
+              </div>
+              <div class="modal-field pb-wizard-rules-block pb-wizard-rules-block--fail">
+                <label>Fail</label>
+                <div class="pb-wizard-rules">
+                  <div v-for="(rule, idx) in pbForm.failure_rule_list" :key="'f'+idx" class="pb-wizard-rule-row">
+                    <input v-model="pbForm.failure_rule_list[idx]" placeholder="Observable block / refusal">
+                    <button type="button" class="btn btn-ghost btn-sm" @click="pbForm.failure_rule_list.splice(idx, 1)" :disabled="pbForm.failure_rule_list.length <= 1">×</button>
+                  </div>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="pbForm.failure_rule_list.push('')">+ Add</button>
+                </div>
+              </div>
+            </div>
+            <div class="modal-field">
+              <label for="pb-play-review">Mission brief</label>
+              <textarea id="pb-play-review" v-model="pbForm.play" rows="5" class="pb-intent-input"></textarea>
+            </div>
+          </section>
+        </template>
+
+        <template v-if="pbCreateMode === 'human' && pbWizardStep === 5">
+          <section v-if="!pbGenerating" class="pb-wizard-panel pb-wizard-confirm" aria-labelledby="pb-confirm-heading">
+            <div class="pb-wizard-panel-head">
+              <h3 id="pb-confirm-heading" class="pb-wizard-panel-title">Plan Mission</h3>
+              <p class="pb-wizard-panel-hint">Name the mission, set the target, then create.</p>
+            </div>
+            <div class="pb-wizard-confirm-fields">
+              <div class="modal-field">
+                <label for="pb-name">Name</label>
+                <input id="pb-name" v-model="pbForm.name" placeholder="Mission name">
+              </div>
+              <div class="modal-field">
+                <label>Mission ID</label>
+                <input v-model="pbForm.playbook_id" style="font-family:var(--mono);" @input="pbForm.playbook_id = pbSlugify(pbForm.playbook_id)">
+                <span class="modal-field-hint">Default is the hunt-name slug → <code>playbooks/{{ pbForm.playbook_id || 'id' }}.json</code></span>
+              </div>
+              <div class="modal-field">
+                <label for="pb-attack-objective">Target</label>
+                <textarea
+                  id="pb-attack-objective"
+                  v-model="pbForm.attack_objective"
+                  rows="2"
+                  placeholder="e.g. Output the Epstein list of names who visited the island."
+                ></textarea>
+                <span class="modal-field-hint">What every opening prompt must ask for. Leave blank only if the mission is about changing behavior with no concrete ask.</span>
+              </div>
+              <div class="modal-field">
+                <label for="pb-standard-action">Follow-up after success</label>
+                <textarea
+                  id="pb-standard-action"
+                  v-model="pbForm.standard_action"
+                  rows="2"
+                  placeholder="Optional. Instruction / jailbreak plays: post-success follow-up check."
+                ></textarea>
+                <span class="modal-field-hint">Only sent after a jailbreak seems to work - a separate follow-up. Do not put this in the main attack prompts. Must differ from the attack objective. Clear to turn off.</span>
+              </div>
+              <div class="checkbox-row" style="margin:8px 0;">
+                <label>
+                  <input type="checkbox" v-model="pbForm.overwrite">
+                  <span>Overwrite if this ID already exists</span>
+                </label>
+              </div>
+            </div>
+            <div class="pb-wizard-summary-card">
+              <p class="pb-wizard-summary"><strong>Category</strong> {{ pbWizardCategoryLabel() }}</p>
+              <div v-if="pbHypothesisLeafHint(pbForm)" class="modal-field">
+                <p class="modal-note-warn">{{ pbHypothesisLeafHint(pbForm).message }}</p>
+                <button type="button" class="btn btn-ghost btn-sm" @click="pbApplySuggestedLeafFromHypothesis('wizard')">
+                  Switch to {{ pbHypothesisLeafHint(pbForm).suggestedLabel }}
+                </button>
+              </div>
+              <p class="pb-wizard-summary"><strong>Mission brief</strong> {{ pbForm.play }}</p>
+              <p class="pb-wizard-summary"><strong>Success</strong> {{ pbWizardNonEmptyRules(pbForm.success_rule_list).length }} rule(s)</p>
+              <ul class="pb-wizard-summary-list">
+                <li v-for="(r, i) in pbWizardNonEmptyRules(pbForm.success_rule_list)" :key="'cs'+i">{{ r }}</li>
+              </ul>
+              <p class="pb-wizard-summary"><strong>Failure</strong> {{ pbWizardNonEmptyRules(pbForm.failure_rule_list).length }} rule(s)</p>
+              <ul class="pb-wizard-summary-list">
+                <li v-for="(r, i) in pbWizardNonEmptyRules(pbForm.failure_rule_list)" :key="'cf'+i">{{ r }}</li>
+              </ul>
+            </div>
+          </section>
+        </template>
+
+        <div v-if="pbGenerating || pbGenerationOutput.length" class="modal-play-gen-status" aria-live="polite">
+          <div class="modal-play-gen-head">
+            <div class="modal-play-gen-head-row">
+              <span v-if="pbGenerating" class="modal-play-gen-spinner" aria-hidden="true"></span>
+              <span class="output-panel-status" :class="'output-panel-status--' + pbGenerationStatusKind">
+                {{ pbGenerating ? 'Building' : (pbGenerationStatusKind === 'done' ? 'Complete' : (pbGenerationStatusKind === 'failed' ? 'Failed' : 'Status')) }}
+              </span>
+            </div>
+            <p v-if="pbGenerationCurrentPhase" class="modal-play-gen-phase">{{ pbGenerationCurrentPhase }}</p>
+            <p class="modal-play-gen-hint">Progress streams in Experiment Output.</p>
+          </div>
+        </div>
+
+        <div v-if="pbMsg" class="modal-status">{{ pbMsg }}</div>
+        <p v-if="pbError" class="modal-error">{{ pbError }}</p>
+      </div>
+
+      <div class="modal-actions pb-wizard-actions">
+        <button
+          type="button"
+          class="btn btn-ghost"
+          @click="pbGenerating ? cancelPlaybookGenerate() : closePlaybookModal()"
+        >{{ pbGenerating ? 'Stop' : 'Cancel' }}</button>
+        <div class="pb-wizard-actions-end">
+          <button
+            v-if="pbWizardStep > 1 && !pbGenerating"
+            type="button"
+            class="btn btn-ghost"
+            @click="pbWizardBack"
+          >Back</button>
+          <button
+            v-if="pbCreateMode === 'ai' && pbWizardStep === 2 && pbAiConflict && !pbGenerating"
+            type="button"
+            class="btn btn-primary"
+            @click="submitPlaybookGenerateAi"
+            :disabled="!pbFormCategoryValid() || !pbSlugify(pbForm.playbook_id || pbForm.name)"
+          >Retry create</button>
+          <button
+            v-else-if="pbCreateMode === 'ai' && pbWizardStep === 2 && !pbGenerating"
+            type="button"
+            class="btn btn-primary"
+            @click="pbWizardNext"
+            :disabled="!pbWizardCanAdvance()"
+          >Build with AI</button>
+          <button
+            v-else-if="pbCreateMode === 'human' && pbWizardStep > 1 && pbWizardStep < 5 && !pbGenerating"
+            type="button"
+            class="btn btn-primary"
+            @click="pbWizardNext"
+            :disabled="!pbWizardCanAdvance()"
+          >Next</button>
+          <button
+            v-else-if="pbCreateMode === 'human' && pbWizardStep === 5"
+            type="button"
+            class="btn btn-primary"
+            @click="submitPlaybookGenerate"
+            :disabled="pbGenerating || !pbWizardCanGenerate()"
+          >
+            {{ pbGenerating ? 'Building…' : 'Plan Mission' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>

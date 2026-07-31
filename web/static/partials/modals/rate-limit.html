@@ -1,0 +1,23 @@
+  <!-- Run rate-limit modal -->
+  <div v-if="showRunRateLimitModal" class="modal-backdrop" @click.self="dismissRunRateLimitModal">
+    <div class="modal modal-wide">
+      <div class="modal-sub">Rate limit detected</div>
+      <div class="modal-help">
+        <p>Probes paused - <strong>{{ site }}</strong> is showing a rate-limit or “too many requests” screen.</p>
+        <p>Automatic backoff did not clear the limit. Wait before resuming, or lower pool/cluster concurrency in Settings → Browser.</p>
+        <p v-if="rateLimitWaiting">
+          Waiting <strong>{{ rateLimitCountdown }}</strong>s before resuming probes…
+        </p>
+        <p v-else>
+          Recommended wait: <strong>{{ runRateLimitBackoffSec }}s</strong>
+        </p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="dismissRunRateLimitModal" :disabled="rateLimitWaiting">Cancel</button>
+        <button type="button" class="btn btn-primary" @click="confirmRateLimitResume" :disabled="rateLimitWaiting">
+          {{ rateLimitWaiting ? ('Waiting… ' + rateLimitCountdown + 's') : ('Wait ' + runRateLimitBackoffSec + 's and resume') }}
+        </button>
+      </div>
+    </div>
+  </div>
+

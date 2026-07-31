@@ -1,0 +1,21 @@
+        <!-- Intel (Premium in Community) -->
+        <template v-if="tab === 'intel'">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <h2 style="margin:0;">Playbook intel</h2>
+          </div>
+          <div class="premium-panel" role="region" aria-label="Premium feature">
+            <div class="premium-panel__badge">Premium</div>
+            <h3 class="premium-panel__title">{{ premiumFeatureLabel('intel') }}</h3>
+            <p class="premium-panel__body">{{ premiumDetail('intel') }}</p>
+            <p class="cfg-note" style="margin:0;">
+              Recon remains available in Community. Intel editing, credentials inventory, and
+              auto-extract from reports require Premium.
+            </p>
+            <a
+              class="btn btn-primary btn-sm premium-panel__cta"
+              :href="PREMIUM_URL"
+              target="_blank"
+              rel="noopener noreferrer"
+            >Get Premium</a>
+          </div>
+        </template>

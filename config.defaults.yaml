@@ -1,0 +1,55 @@
+# =============================================================================
+# Genbounty shipped defaults (config.defaults.yaml)
+# =============================================================================
+#
+# These values apply when nothing more specific is set. Edit this file to change
+# the baseline for a fresh install or deployment image.
+#
+# Precedence (lowest → highest):
+#   1. config.defaults.yaml          ← this file (shipped baseline)
+#   2. pipeline_settings.yaml        (Settings → Cache Control / Pipeline; secrets stay in .env)
+#   3. browser-bot/sites/<site>/config.yaml       (optional site-wide overrides)
+#   4. browser-bot/sites/<site>/<component>/config.yaml   (per-component overrides)
+#
+# Browser Config knobs also merge through browser-bot/browser_bot/config.py at runtime.
+# Only include keys under `settings:` that you want as defaults. Site and component
+# configs use the same keys. Booleans: true | false.
+#
+# Web UI: Settings → Component Config → Settings overrides (inherit = use global).
+# Browser UI targets: headed human fetch with human-tier features enabled.
+
+settings:
+  gemini_use_cache: false
+  openai_use_cache: true
+  openai_cache_retention: standard
+  grok_use_cache: true
+  anthropic_use_cache: true
+  anthropic_cache_ttl: 5m
+  FETCH_METHOD: human
+  POOL_SIZE: 1
+  CONTEXT_COUNT: 1
+  PAGES_PER_CONTEXT: 1
+  POOL_CLUSTER_HUMAN_LIKE: true
+  POOL_CLUSTER_ALLOW_STYLES: true
+  POOL_CLUSTER_USE_STEALTH: true
+  POOL_CLUSTER_USE_HUMAN_CHROME: true
+  POOL_CLUSTER_USE_HUMAN_CONTEXT: true
+  API_CONCURRENCY: 2
+  EVASION_REQUEST_DELAY_S: 0.5
+  EVASION_RETRY_WAIT_S: 10.0
+  EVASION_MAX_RETRIES: 3
+  RUN_SCREENSHOT_INTERVAL_S: 0.0
+  HUMAN_COUNTRY: UK
+  HUMAN_ALLOW_STYLES: true
+  HUMAN_READ_DELAY_MS: 600
+  HUMAN_SCROLL_AFTER_LOAD: true
+  HUMAN_ROTATE_REQUEST_ATTRIBUTES: true
+  HUMAN_USER_AGENT: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like
+    Gecko) Chrome/131.0.0.0 Safari/537.36
+  HEADLESS: false
+  USE_CDP_BROWSER: false
+  CHROMIUM_EXECUTABLE_PATH: ''
+  CHROME_CHANNEL: chromium
+  BLOCKED_TYPES:
+  - font
+  - media

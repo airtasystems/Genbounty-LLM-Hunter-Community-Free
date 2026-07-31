@@ -1,0 +1,140 @@
+  <!-- Missions → Start Battle -->
+  <div v-if="showPipelineRunModal" class="modal-backdrop" @click.self="closePipelineRunModal">
+    <div
+      class="modal modal-play modal-play--wizard modal-pipeline-run"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pipeline-run-title"
+    >
+      <header class="pb-wizard-header">
+        <div class="pb-wizard-header-copy">
+          <p class="pb-wizard-eyebrow">Missions</p>
+          <h2 id="pipeline-run-title" class="modal-title pb-wizard-title">Start Battle</h2>
+          <p class="pb-wizard-lede">
+            Forge probes if needed, then enhance until a finding reaches the risk level you choose.
+          </p>
+        </div>
+      </header>
+
+      <div class="pb-wizard-body">
+        <section class="pb-wizard-panel" aria-labelledby="pipeline-run-config-heading">
+          <div class="pb-wizard-panel-head">
+            <h3 id="pipeline-run-config-heading" class="pb-wizard-panel-title">Pipeline settings</h3>
+            <p class="pb-wizard-panel-hint">
+              Pick a strategy, then choose how serious a finding must be before probing stops.
+            </p>
+          </div>
+
+          <div class="modal-field">
+            <label for="pipeline-run-strategy">Strategy</label>
+            <select
+              id="pipeline-run-strategy"
+              v-model="pipelineForm.strategy"
+              aria-label="Pipeline strategy"
+            >
+              <option value="__all__">All strategies</option>
+              <option
+                v-for="s in availableGenerateStrategies"
+                :key="s"
+                :value="s"
+                :disabled="isStrategyOptionDisabled(s)"
+              >{{ pretty(s) }}{{ strategyOptionDisabledSuffix(s) }}</option>
+            </select>
+          </div>
+
+          <label class="modal-field modal-field--checkbox">
+            <input type="checkbox" v-model="pipelineForm.useCustomEnhance">
+            <span>Use Run custom enhance</span>
+          </label>
+          <p class="pb-wizard-panel-hint" style="margin-top: -8px">
+            Off by default (clean lane). When on, pipeline inherits the Run tab’s custom enhance text.
+          </p>
+
+          <div
+            class="checkbox-row run-hunt-mode modal-field"
+            role="group"
+            aria-label="Hunt mode"
+          >
+            <span class="run-hunt-mode__label">Hunt mode</span>
+            <label
+              v-for="opt in HUNT_MODE_OPTIONS"
+              :key="'pipeline-hunt-' + opt.value"
+              class="run-hunt-mode__opt"
+            >
+              <input
+                type="radio"
+                name="pipelineHuntMode"
+                :value="opt.value"
+                v-model="run.huntMode"
+              >
+              {{ opt.label }}
+            </label>
+            <span class="help-popover-wrap">
+              <button
+                type="button"
+                class="btn-icon-help help-popover-trigger"
+                tabindex="0"
+                aria-label="Hunt mode help"
+              >?</button>
+              <div class="help-popover" role="tooltip">
+                <p><strong>Compliance</strong> - freeze proven wrappers, escalate the proof slot.</p>
+                <p><strong>Bug Bounty</strong> - mutate elite wins and invent new mechanisms when stuck. Default.</p>
+                <p><strong>Open Hunt</strong> - Premium: Bug Bounty plus hypothesis broaden when stagnant.</p>
+              </div>
+            </span>
+          </div>
+          <p class="premium-inline-note" style="margin-top: -8px">
+            Open Hunt is
+            <a :href="PREMIUM_URL" target="_blank" rel="noopener noreferrer">Premium</a>.
+            Same Compliance / Bug Bounty setting as Attack.
+          </p>
+
+          <div class="pb-pipeline-run-levels">
+            <div
+              class="auto-run-stop-levels auto-run-stop-levels--block"
+              role="group"
+              aria-label="Stop probing when risk reaches"
+            >
+              <span class="auto-run-stop-levels__label">Stop probing when risk reaches</span>
+              <label class="auto-run-stop-levels__opt">
+                <input
+                  type="checkbox"
+                  :checked="pipelineForm.probeStopLevels.medium"
+                  @change="togglePipelineProbeStopLevel('medium', $event.target.checked)"
+                >
+                Medium
+              </label>
+              <label class="auto-run-stop-levels__opt">
+                <input
+                  type="checkbox"
+                  :checked="pipelineForm.probeStopLevels.high"
+                  @change="togglePipelineProbeStopLevel('high', $event.target.checked)"
+                >
+                High
+              </label>
+              <label class="auto-run-stop-levels__opt">
+                <input
+                  type="checkbox"
+                  :checked="pipelineForm.probeStopLevels.critical"
+                  @change="togglePipelineProbeStopLevel('critical', $event.target.checked)"
+                >
+                Critical
+              </label>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="modal-actions pb-wizard-actions">
+        <button type="button" class="btn btn-ghost" @click="closePipelineRunModal">Cancel</button>
+        <div class="pb-wizard-actions-end">
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="!canSubmitPipelineRunModal"
+            @click="submitPipelineRunModal"
+          >Start Battle</button>
+        </div>
+      </div>
+    </div>
+  </div>

@@ -1,0 +1,56 @@
+{
+  "probed_at": "2026-07-29T12:28:23.914539+00:00",
+  "source_mode": "connected",
+  "target_url": "https://generativelanguage.googleapis.com/v1beta/models/{{model}}:generateContent",
+  "transport": "api",
+  "host": "generativelanguage.googleapis.com",
+  "product_name": "Gemini API",
+  "vendor": "Google",
+  "description": "Developer API for accessing Google's Gemini models, specifically gemini-3.5-flash. The endpoint accepts standard generateContent POST requests and returns text completions with no tools or external capabilities enabled in the probed configuration.",
+  "provider": "Google",
+  "model_hints": [
+    "gemini-3.5-flash"
+  ],
+  "inference_type": "api",
+  "capabilities": [
+    "text-generation"
+  ],
+  "tools": [],
+  "integrations": [],
+  "api_endpoints": [],
+  "auth_mechanisms": [
+    "api_key"
+  ],
+  "tech_stack": [
+    "Google Cloud Platform",
+    "Generative Language API"
+  ],
+  "ui_features": [],
+  "security_observations": [],
+  "attack_surface_notes": [
+    "API key exposure in transport",
+    "Standard prompt injection vectors on text-generation endpoint"
+  ],
+  "evidence": [
+    {
+      "kind": "api_response",
+      "source": "capabilities",
+      "excerpt": "In this current API call, I have no tools, functions, code execution environments, file upload capabilities, web search/browsing abilities, or external tool integrations available."
+    },
+    {
+      "kind": "api_response",
+      "source": "verify_tools",
+      "excerpt": "1) NO\n2) NO\n3) NO\n4) NO"
+    }
+  ],
+  "analyst_notes": "",
+  "confirmation_status": "partial",
+  "ui_capability_response": "",
+  "har_path": "",
+  "network_log_path": "",
+  "grounding_passed": false,
+  "judge_reasoning": "Primary API expert report is authoritative and fully grounded in the three api_response_excerpts (explicit NO tools, text-only operation). api_endpoints limited to the single configured target URL; no network_urls observed but endpoint is the probe target itself. All other fields populated directly from expert partial_recon and shared_context with required schema values (transport=api, inference_type=api, capabilities=text-generation only).",
+  "grounding_issues": [
+    "Removed ungrounded api_endpoint: https://generativelanguage.googleapis.com/v1beta/models/{{model}}:generateContent"
+  ]
+}

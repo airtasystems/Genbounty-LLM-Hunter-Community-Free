@@ -1,0 +1,45 @@
+  <!-- Run preview zoom modal — all worker slots, live-updating -->
+  <div v-if="showRunPreviewModal" class="modal-backdrop" @click.self="closeRunPreviewModal">
+    <div class="modal modal-preview">
+      <div class="modal-sub">
+        Live operations
+        <span v-if="runPreviewSlotIndices.length > 1" class="run-preview-modal-count">
+          {{ runPreviewSlotIndices.length }} screens
+        </span>
+      </div>
+      <div
+        class="run-preview-modal-body"
+        :class="{
+          'run-preview-modal-body--multi': runPreviewSlotIndices.length > 1,
+          'run-preview-modal-body--single': runPreviewSlotIndices.length <= 1,
+        }"
+        :style="{ '--run-preview-slots': runPreviewSlotIndices.length }"
+      >
+        <div
+          v-for="slot in runPreviewSlotIndices"
+          :key="'modal-slot-' + slot"
+          class="run-preview-modal-slot"
+          :class="{ 'is-focused': runPreviewModalSlot === slot }"
+          @click="runPreviewModalSlot = slot"
+        >
+          <div class="run-preview-modal-slot-label">
+            {{ previewForSlot(slot)?.label || (runPreviewSlotIndices.length > 1 ? ('Worker ' + (slot + 1)) : 'Browser') }}
+          </div>
+          <div class="run-preview-modal-frame">
+            <img
+              v-if="previewForSlot(slot)"
+              class="run-preview-modal-img"
+              :key="runPreviewImgKey(slot)"
+              :src="previewForSlot(slot).url"
+              :alt="previewForSlot(slot).label || ('Worker ' + (slot + 1))"
+              @error="onRunPreviewImgError(slot)"
+            >
+            <div v-else class="run-preview-modal-idle">Waiting…</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions modal-actions--end">
+        <button type="button" class="btn btn-primary" @click="closeRunPreviewModal">Close</button>
+      </div>
+    </div>
+  </div>

@@ -1,0 +1,58 @@
+            <div
+              v-if="runLivePanelVisible"
+              class="run-live-panel war-room-live-panel"
+              :class="{ 'run-live-panel--collapsed': !runLivePanelOpen }"
+            >
+              <button
+                type="button"
+                class="run-live-header"
+                @click="runLivePanelOpen = !runLivePanelOpen"
+                :aria-expanded="runLivePanelOpen"
+                :title="runLivePanelOpen ? 'Minimize live operations' : 'Expand live operations'"
+              >
+                <span class="run-live-chevron" aria-hidden="true">▾</span>
+                <span class="run-live-title">Live operations</span>
+                <span v-if="!runLivePanelOpen && hasRunLivePreview" class="run-live-collapsed-hint">Screenshots saved</span>
+                <span class="run-live-toggle-label">{{ runLivePanelOpen ? 'Minimize' : 'Expand' }}</span>
+              </button>
+              <div v-show="runLivePanelOpen" class="run-live-body">
+                <div class="run-live-columns run-live-columns--stacked">
+                  <div
+                    class="run-live-screenshot"
+                    :class="{ 'run-live-screenshot-multi': runPreviewSlotIndices.length > 1 }"
+                    :style="{ '--run-preview-slots': runPreviewSlotIndices.length }"
+                  >
+                    <div class="run-preview-grid">
+                      <div
+                        v-for="slot in runPreviewSlotIndices"
+                        :key="slot"
+                        class="run-preview-slot"
+                      >
+                        <div class="run-preview-label">
+                          {{ runPreviewSlotIndices.length > 1 ? ('Worker ' + (slot + 1)) : 'Browser' }}
+                        </div>
+                        <div
+                          v-if="previewForSlot(slot)"
+                          class="run-preview-item"
+                          @click="openRunPreviewModal(previewForSlot(slot), slot)"
+                          title="Click to enlarge"
+                        >
+                          <div class="run-preview-frame run-preview-frame-slot">
+                            <img
+                              class="run-preview-img"
+                              :key="runPreviewImgKey(slot)"
+                              :src="previewForSlot(slot).url"
+                              :alt="runPreviewConfig.mode === 'human' ? 'Live operations' : ('Worker ' + (slot + 1))"
+                              @error="onRunPreviewImgError(slot)"
+                            >
+                          </div>
+                        </div>
+                        <div v-else class="run-preview-placeholder run-preview-placeholder-slot">
+                          {{ runJobActive ? 'Waiting…' : 'Idle' }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>

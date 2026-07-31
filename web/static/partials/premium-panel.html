@@ -1,0 +1,11 @@
+  <div class="premium-panel" role="region" aria-label="Premium feature">
+    <div class="premium-panel__badge">Premium</div>
+    <h3 class="premium-panel__title">{{ premiumFeatureLabel(premiumActiveFeature) }}</h3>
+    <p class="premium-panel__body">{{ premiumDetail(premiumActiveFeature) }}</p>
+    <a
+      class="btn btn-primary btn-sm premium-panel__cta"
+      :href="PREMIUM_URL"
+      target="_blank"
+      rel="noopener noreferrer"
+    >Get Premium</a>
+  </div>

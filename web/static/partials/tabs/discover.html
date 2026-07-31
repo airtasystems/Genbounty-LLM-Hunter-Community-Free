@@ -1,0 +1,381 @@
+        <!-- Discovery -->
+        <template v-if="tab === 'discover'">
+          <h2>Connect Target</h2>
+
+          <div class="setup-steps">
+            <!-- Step 1: Authentication -->
+            <div class="setup-step">
+              <div class="setup-step-header">
+                <span class="step-num" :class="authOwnConfigured ? 'done' : ''">{{ authOwnConfigured ? '✓' : '1' }}</span>
+                Target access
+                <span class="step-status" :class="authOwnConfigured ? 'ok' : (authConfigured && authScope === 'shared' ? 'warn' : authConfigured ? 'ok' : 'warn')">
+                  {{ authOwnConfigured
+                    ? (authMode === 'none' ? 'No login required' : authMode === 'api_key' ? 'API key saved' : 'UI login saved')
+                    : (authScope === 'shared' ? 'Using shared auth from ' + authSharedFrom : authConfigured ? 'Available via fallback' : 'Not configured') }}
+                </span>
+              </div>
+              <div class="setup-step-body">
+                <p v-if="globalUseCdpBrowser" class="cfg-note" style="margin:0 0 10px 0;padding:8px 10px;border:1px solid rgba(96,165,250,0.35);border-radius:var(--radius);background:rgba(96,165,250,0.08);">
+                  {{ globalCdpBrowserMessage }}
+                </p>
+                <div v-if="!authOwnConfigured && authReuseOptions.length" class="auth-reuse-panel">
+                  <p style="margin:0 0 8px 0;">
+                    <strong>Reuse existing access</strong>
+                    <span v-if="authScope === 'shared'"> - currently using auth from <code>{{ authSharedFrom }}</code> without saving a copy here.</span>
+                    <span v-else> - this component has no saved auth yet.</span>
+                  </p>
+                  <div class="auth-reuse-actions">
+                    <button
+                      v-for="opt in authReuseOptions"
+                      :key="opt.source + ':' + opt.component"
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      @click="reuseSiteAuth(opt)"
+                      :disabled="authReuseSaving || !site || !component"
+                    >
+                      Copy {{ opt.source === 'site' ? 'site' : 'component' }} auth
+                      ({{ opt.label }}{{ opt.mode ? ' · ' + (opt.mode === 'session' ? 'UI login' : opt.mode === 'api_key' ? 'API key' : 'public') : '' }})
+                    </button>
+                  </div>
+                  <p v-if="authReuseError" style="color:var(--red);font-size:13px;margin:8px 0 0 0;">{{ authReuseError }}</p>
+                </div>
+                <template v-if="authConfigured && !authOwnConfigured && authScope === 'shared' && !pendingRunAfterLogin">
+                  <p>
+                    Probes can use auth from <code>{{ authSharedFrom }}</code> via site fallback.
+                    Copy it above to store under <code>sites/{{ site }}/{{ component }}/auth.json</code>, or set up access below.
+                  </p>
+                </template>
+
+                <!-- Own auth already saved for this component -->
+                <template v-if="authOwnConfigured && authMode === 'none' && !pendingRunAfterLogin">
+                  <p>
+                    This component is set up for <strong>public access</strong> - no login session is stored.
+                    Browser probes will run without saved cookies.
+                  </p>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="resetAuthSetup">Change access type</button>
+                </template>
+
+                <template v-else-if="authOwnConfigured && authMode === 'api_key' && !pendingRunAfterLogin">
+                  <p>
+                    API key is saved in <code>.env</code> for API requests
+                  </p>
+                  <div class="form-row" style="margin-top:8px;">
+                    <label>{{ authHasApiKey ? 'Update API key' : 'API key' }}</label>
+                    <input v-model="authApiKeyInput" type="password" placeholder="Bearer token or raw API key" style="flex:1;max-width:none;">
+                  </div>
+                  <div class="form-row">
+                    <label>Auth header</label>
+                    <select v-model="authApiKeyHeader" style="max-width:280px;flex:0 1 auto;">
+                      <option v-for="h in AUTH_HEADER_OPTIONS" :key="h.value" :value="h.value">{{ h.label }}</option>
+                    </select>
+                    <label v-if="authApiKeyHeader === 'Authorization'" class="checkbox-row checkbox-row-tight" style="margin:0;flex:0 0 auto;">
+                      <input type="checkbox" v-model="authUseBearer">
+                      <span>Send as Bearer token</span>
+                    </label>
+                  </div>
+                  <div class="form-row">
+                    <label>Query param (optional)</label>
+                    <input v-model="authApiKeyQueryParam" placeholder="e.g. key for Gemini ?key=" style="max-width:200px;font-family:var(--mono);font-size:12px;">
+                    <span class="cfg-note" style="margin:0;">Leave empty to use header only</span>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <button type="button" class="btn btn-primary btn-sm" @click="saveTargetApiKey" :disabled="!site || authApiKeySaving">
+                      {{ authApiKeySaving ? 'Saving…' : (authHasApiKey ? 'Update key' : 'Save API key') }}
+                    </button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="resetAuthSetup">Change access type</button>
+                  </div>
+                  <p v-if="authApiKeyError" style="color:var(--red);font-size:13px;margin-top:6px;">{{ authApiKeyError }}</p>
+                </template>
+
+                <template v-else-if="authOwnConfigured && authMode === 'session' && !pendingRunAfterLogin">
+                  <p>
+                    UI login session is saved for this component. Browser probes reuse saved cookies and storage.
+                    <span v-if="loginUrl"> Login page: <code>{{ loginUrl }}</code></span>
+                  </p>
+                  <div class="form-row discover-login-url-row" style="margin-top:8px;">
+                    <label for="discover-relogin-url">Login URL</label>
+                    <input
+                      id="discover-relogin-url"
+                      v-model="loginUrl"
+                      placeholder="example.com or chatgpt"
+                      @blur="applyNormalizedLoginUrl"
+                    >
+                  </div>
+                  <label class="checkbox-row checkbox-row-tight" style="margin:8px 0 0 0;">
+                    <input type="checkbox" :checked="effectiveLoginUseCdp" :disabled="loginRunning || globalUseCdpBrowser" @change="onLoginUseCdpChange">
+                    <span>Use Chrome CDP login (auto-launch)</span>
+                  </label>
+                  <p v-if="effectiveLoginUseCdp && !globalUseCdpBrowser" class="cfg-note" style="margin:6px 0 0 0;">
+                    Launches <code>google-chrome-stable</code> with a persistent profile and attaches via CDP
+                    (port 9222). Use for bot-protected targets such as Google/Gemini.
+                  </p>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                    <button type="button" class="btn btn-primary btn-sm" @click="startLogin()" :disabled="!site || !loginUrl || loginRunning">Re-login</button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="sendLoginEnter" :disabled="!loginJobId || !loginRunning">Press Enter (done)</button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="resetAuthSetup">Change access type</button>
+                  </div>
+                  <p v-if="loginRunning && loginCdpCommand && !effectiveLoginUseCdp" class="cfg-note" style="margin-top:8px;">
+                    See <strong>Experiment Output</strong> for the Chrome command. Run it in a separate terminal,
+                    complete sign-in there, then click <strong>Press Enter (done)</strong>.
+                  </p>
+                  <p v-else-if="loginRunning && effectiveLoginUseCdp" class="cfg-note" style="margin-top:8px;">
+                    Chrome should open automatically - complete sign-in, then click <strong>Press Enter (done)</strong>.
+                  </p>
+                  <p v-else-if="loginRunning" class="cfg-note" style="margin-top:8px;">
+                    Browser open - complete sign-in, then click <strong>Press Enter (done)</strong> to save the session.
+                  </p>
+                </template>
+
+                <!-- No own auth yet: always allow login / API key / public (even when sibling auth exists) -->
+                <template v-else-if="!authOwnConfigured && authLoginChoice === null && !pendingRunAfterLogin">
+                  <p>How does this target authenticate?</p>
+                  <label class="checkbox-row checkbox-row-tight" style="margin:0 0 10px 0;">
+                    <input type="checkbox" :checked="effectiveLoginUseCdp" :disabled="loginRunning || globalUseCdpBrowser" @change="onLoginUseCdpChange">
+                    <span>Use Chrome CDP login (auto-launch)</span>
+                  </label>
+                  <p v-if="effectiveLoginUseCdp && !globalUseCdpBrowser" class="cfg-note" style="margin:0 0 10px 0;">
+                    Launches real Chrome with a persistent profile via CDP (port 9222). Recommended for bot-protected targets.
+                  </p>
+                  <div class="auth-choice-btns">
+                    <button type="button" class="btn btn-primary" @click="chooseAuthRequired" :disabled="!site || loginRunning">Yes - login to UI</button>
+                    <button type="button" class="btn btn-ghost" @click="chooseAuthApiKey">API key</button>
+                    <button type="button" class="btn btn-ghost" @click="chooseAuthNotRequired" :disabled="!site || authPublicSaving">
+                      {{ authPublicSaving ? 'Saving…' : 'No - public access' }}
+                    </button>
+                  </div>
+                </template>
+
+                <template v-else-if="!authOwnConfigured && authLoginChoice === 'api_key'">
+                  <p>
+                    Save an API key for this component. Browser probes run without a UI login (same as public access).
+                    API endpoint discovery and API transport merge the key from this component's
+                    <code>sites/{{ site }}/{{ component }}/auth.json</code> (not config.yaml).
+                  </p>
+                  <div class="form-row">
+                    <label>API key</label>
+                    <input v-model="authApiKeyInput" type="password" placeholder="Bearer token or raw API key" style="flex:1;max-width:none;">
+                  </div>
+                  <div class="form-row">
+                    <label>Auth header</label>
+                    <select v-model="authApiKeyHeader" style="max-width:280px;flex:0 1 auto;">
+                      <option v-for="h in AUTH_HEADER_OPTIONS" :key="h.value" :value="h.value">{{ h.label }}</option>
+                    </select>
+                    <label v-if="authApiKeyHeader === 'Authorization'" class="checkbox-row checkbox-row-tight" style="margin:0;flex:0 0 auto;">
+                      <input type="checkbox" v-model="authUseBearer">
+                      <span>Send as Bearer token</span>
+                    </label>
+                  </div>
+                  <div class="form-row">
+                    <label>Query param (optional)</label>
+                    <input v-model="authApiKeyQueryParam" placeholder="e.g. key for Gemini ?key=" style="max-width:200px;font-family:var(--mono);font-size:12px;">
+                    <span class="cfg-note" style="margin:0;">Leave empty to use header only</span>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <button type="button" class="btn btn-primary" @click="saveTargetApiKey" :disabled="!site || authApiKeySaving">
+                      {{ authApiKeySaving ? 'Saving…' : 'Save API key' }}
+                    </button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="authLoginChoice = null">Back</button>
+                  </div>
+                  <p v-if="authApiKeyError" style="color:var(--red);font-size:13px;margin-top:6px;">{{ authApiKeyError }}</p>
+                </template>
+
+                <template v-else-if="!authOwnConfigured && (authLoginChoice === true || pendingRunAfterLogin)">
+                  <p>Open a browser, log in to the target web UI, then press Enter to save the session.</p>
+                  <div class="form-row discover-login-url-row" style="margin-top:8px;">
+                    <label for="discover-login-url">Login URL</label>
+                    <input
+                      id="discover-login-url"
+                      v-model="loginUrl"
+                      placeholder="example.com or chatgpt"
+                      @blur="applyNormalizedLoginUrl"
+                    >
+                  </div>
+                  <p class="cfg-note" style="margin:0;">
+                    Bare names get <code>https://</code> and <code>.com</code> when needed (e.g. <code>chatgpt</code> → <code>https://chatgpt.com</code>).
+                  </p>
+                  <label class="checkbox-row checkbox-row-tight" style="margin:0;">
+                    <input type="checkbox" :checked="effectiveLoginUseCdp" :disabled="loginRunning || globalUseCdpBrowser" @change="onLoginUseCdpChange">
+                    <span>Use Chrome CDP login (auto-launch)</span>
+                  </label>
+                  <p v-if="effectiveLoginUseCdp && !globalUseCdpBrowser" class="cfg-note" style="margin:0;">
+                    Launches <code>google-chrome-stable</code> with a persistent profile and attaches via CDP
+                    (port 9222). Use for bot-protected targets such as Google/Gemini.
+                  </p>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary" @click="startLogin()" :disabled="!site || !loginUrl || loginRunning">Start Login</button>
+                    <button type="button" class="btn btn-ghost" @click="sendLoginEnter" :disabled="!loginJobId || !loginRunning">Press Enter (done)</button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="authLoginChoice = null">Back</button>
+                  </div>
+                  <p v-if="loginRunning && effectiveLoginUseCdp" class="cfg-note" style="margin:0;">
+                    Chrome should open automatically - complete sign-in, then click <strong>Press Enter (done)</strong>.
+                  </p>
+                </template>
+              </div>
+            </div>
+
+            <!-- Step 2: Component Discovery -->
+            <div class="setup-step">
+              <div class="setup-step-header">
+                <span class="step-num" :class="configOwnComplete ? 'done' : ''">{{ configOwnComplete ? '✓' : '2' }}</span>
+                Configure Component
+                <span class="step-status" :class="configOwnComplete ? 'ok' : 'warn'">
+                  {{ configOwnComplete ? 'Submission configured' : 'Not configured' }}
+                </span>
+              </div>
+              <div class="setup-step-body">
+                <div v-if="!configOwnComplete && configReuseOptions.length" class="auth-reuse-panel config-reuse-panel">
+                  <p style="margin:0 0 8px 0;">
+                    <strong>Reuse component config</strong> - copy submission settings (selectors, API endpoint, etc.) from another component on this site.
+                  </p>
+                  <div class="auth-reuse-actions">
+                    <button
+                      v-for="opt in configReuseOptions"
+                      :key="'cfg-' + opt.component"
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      @click="reuseComponentConfig(opt)"
+                      :disabled="configReuseSaving || !site || !component"
+                    >
+                      Copy config from {{ opt.label }}
+                      ({{ opt.transport === 'api' || opt.transport === 'api_document' || opt.transport === 'api_multipart' ? 'API' : 'Browser UI' }})
+                    </button>
+                  </div>
+                  <p v-if="configReuseError" style="color:var(--red);font-size:13px;margin:8px 0 0 0;">{{ configReuseError }}</p>
+                </div>
+                <div v-if="showComponentStartUrlEditor" class="auth-reuse-panel component-start-url-panel">
+                  <p style="margin:0 0 8px 0;">
+                    <strong>Start URL</strong>
+                    <span> - copied from {{ configCopiedFrom }}; point this at <em>{{ component }}</em>'s chat page.</span>
+                  </p>
+                  <div class="form-row" style="margin:0;">
+                    <label for="discover-start-url">URL</label>
+                    <input
+                      id="discover-start-url"
+                      v-model="compCfg.submission.start_url"
+                      placeholder="example.com/chat or chatgpt"
+                      style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"
+                      @focus="$event.target.select()"
+                      @click="$event.target.select()"
+                      @blur="applyNormalizedStartUrl"
+                    >
+                  </div>
+                  <div class="auth-reuse-actions" style="margin-top:10px;align-items:center;">
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      @click="saveDiscoverStartUrl"
+                      :disabled="!site || !component || !compCfg.submission.start_url.trim() || discoverStartUrlSaving"
+                    >
+                      {{ discoverStartUrlSaving ? 'Saving…' : 'Save Start URL' }}
+                    </button>
+                    <span v-if="discoverStartUrlSaved" class="cfg-note" style="margin:0;color:var(--green);">Saved</span>
+                    <span v-if="discoverStartUrlError" style="color:var(--red);font-size:13px;">{{ discoverStartUrlError }}</span>
+                  </div>
+                </div>
+                <p>Choose how Attack reaches the target: <strong>Browser UI</strong> (selectors + optional login from Step 1) or <strong>API endpoint</strong> (HTTP + API key from Step 1).</p>
+
+                <div class="form-row" style="margin-bottom:12px;">
+                  <label>Connection type</label>
+                  <select v-model="discoverTransport" style="max-width:280px;" aria-label="Connection type">
+                    <option value="browser">Browser UI (chat app)</option>
+                    <option value="api">API endpoint (HTTP API)</option>
+                  </select>
+                </div>
+
+                <template v-if="discoverTransport === 'browser'">
+                  <p v-if="globalUseCdpBrowser" class="cfg-note" style="margin:0 0 10px 0;padding:8px 10px;border:1px solid rgba(96,165,250,0.35);border-radius:var(--radius);background:rgba(96,165,250,0.08);">
+                    {{ globalCdpBrowserMessage }}
+                  </p>
+                  <p>Opens a browser with your auth loaded. Guided steps identify selectors from your clicks; optional multi-turn probe; a validation pass checks composer HTML; a probe prompt verifies response capture (auto-repair if empty). If bot protection blocks the in-browser panel, click <strong>Not working?</strong> - discovery closes the browser and restarts from step 1 using Experiment Output prompts only (no in-page JavaScript).</p>
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <button class="btn btn-primary" @click="startManualDiscover" :disabled="!site || !component || manualDiscoverRunning">Start Discovery</button>
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);">
+                      <input type="checkbox" v-model="guidedDiscovery" :disabled="manualDiscoverRunning">
+                      Start guided discovery
+                    </label>
+                    <label v-if="guidedDiscovery && !globalUseCdpBrowser" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);">
+                      <input type="checkbox" :checked="effectiveGuidedDiscoveryUseCdp" :disabled="manualDiscoverRunning" @change="onGuidedDiscoveryUseCdpChange">
+                      Use Chrome CDP (auto-launch)
+                    </label>
+                    <button class="btn btn-ghost" @click="openDiscoverHelpModal">Help</button>
+                    <button type="button" class="btn btn-ghost" @click="openManualComponentSettings" :disabled="!site || !component" title="Edit config.yaml selectors directly in Settings">
+                      Manual entry
+                    </button>
+                  </div>
+                </template>
+
+                <template v-else>
+                  <div v-if="apiNeedsAuth && !apiAuthReady" class="hint-banner" style="margin-bottom:12px;border-color:var(--yellow);">
+                    <p>
+                      <strong>{{ selectedApiPreset?.label || 'This preset' }}</strong> requires an API key.
+                      Save one in <strong>Step 1 - Target access</strong> (API key) before connecting.
+                    </p>
+                  </div>
+                  <div class="form-row">
+                    <label>API format</label>
+                    <select v-model="apiDiscover.presetId" @change="onApiPresetChange" style="max-width:320px;">
+                      <option v-for="p in llmApiPresets" :key="p.id" :value="p.id">{{ p.label }}</option>
+                    </select>
+                  </div>
+                  <p v-if="selectedApiPreset?.description" class="cfg-note" style="margin:0 0 12px 0;">{{ selectedApiPreset.description }}</p>
+                  <div class="form-row">
+                    <label>API URL</label>
+                    <input v-model="apiDiscover.url" placeholder="https://api.example.com/v1/chat" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Model</label>
+                    <input v-model="apiDiscover.model" :placeholder="selectedApiPreset?.default_model || 'model id'" style="max-width:280px;font-family:var(--mono);font-size:12px;">
+                    <span class="cfg-note" style="margin:0;" v-if="apiDiscover.url && apiDiscover.url.includes(PROMPT_MODEL_HINT)">Required - URL contains {{ PROMPT_MODEL_HINT }}</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Method</label>
+                    <select v-model="apiDiscover.method" style="max-width:160px;">
+                      <option value="POST">POST</option>
+                      <option value="GET">GET</option>
+                      <option value="PUT">PUT</option>
+                      <option value="PATCH">PATCH</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label>Response path</label>
+                    <input v-model="apiDiscover.responsePath" placeholder="choices.0.message.content" style="max-width:280px;font-family:var(--mono);font-size:12px;">
+                    <span class="cfg-note" style="margin:0;">Dot path; use 0 for array indices</span>
+                  </div>
+                  <div class="form-row" style="align-items:flex-start;">
+                    <label style="padding-top:6px;">Request body</label>
+                    <textarea v-model="apiDiscover.bodyJson" rows="6" :placeholder="PROMPT_BODY_PLACEHOLDER" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                  </div>
+                  <p class="cfg-note" style="margin:-8px 0 12px 0;">Use <code>{{ PROMPT_TEMPLATE_HINT }}</code> for the probe prompt; <code>{{ PROMPT_MODEL_HINT }}</code> in URL/body when needed.</p>
+                  <div class="form-row" style="align-items:flex-start;">
+                    <label style="padding-top:6px;">Extra headers</label>
+                    <textarea v-model="apiDiscover.headersJson" rows="2" placeholder='{}' style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                  </div>
+                  <p class="cfg-note" style="margin:-8px 0 12px 0;">Auth headers come from Step 1 - do not put secrets here.</p>
+                  <details style="margin-bottom:12px;">
+                    <summary style="cursor:pointer;color:var(--text-dim);font-size:13px;">Other API transports (upload / multipart)</summary>
+                    <div style="margin-top:10px;">
+                      <div class="form-row">
+                        <label>Transport</label>
+                        <select v-model="apiDiscover.transport" style="max-width:280px;">
+                          <option value="api">Standard JSON API</option>
+                          <option value="api_document">Upload + chat (document_id)</option>
+                          <option value="api_multipart">Multipart (file + prompt)</option>
+                        </select>
+                      </div>
+                      <div v-if="apiDiscover.transport === 'api_document'" class="form-row">
+                        <label>Upload URL</label>
+                        <input v-model="apiDiscover.uploadUrl" placeholder="http://127.0.0.1:3000/api/documents/upload" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                      </div>
+                    </div>
+                  </details>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-primary" @click="startApiDiscover" :disabled="!site || !component || !apiDiscover.url || apiDiscoverRunning || (apiNeedsAuth && !apiAuthReady)">Connect via API</button>
+                    <button type="button" class="btn btn-ghost" @click="openManualComponentSettings" :disabled="!site || !component" title="Edit config.yaml selectors and API fields directly">
+                      Manual entry
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>

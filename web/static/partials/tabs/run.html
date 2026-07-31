@@ -1,0 +1,558 @@
+        <!-- Attack -->
+        <template v-if="tab === 'run'">
+          <div class="run-view" :class="{ 'run-view--results-maximized': runResultsMaximizedActive }">
+            <div class="run-view-controls">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <h2 style="margin:0;">Attack</h2>
+                <button class="btn btn-ghost btn-sm" @click="refreshRunTests" title="Reload available probes">&#8635; Refresh</button>
+              </div>
+              <div v-if="!site || !component" class="run-tests-empty">
+                Select a site and component in the header to attack.
+              </div>
+              <template v-else>
+              <!-- @include scope-readonly-table.html -->
+              <div v-if="!runTestFiles.length" class="run-tests-empty">
+                <p>No probe suites found for this component.</p>
+                <p class="cfg-note" style="margin:8px 0 0 0;">Generate probes from a play first, then return here to run them. You can still send a sample request below to verify Connect Target config.</p>
+                <button type="button" class="btn btn-primary btn-sm" style="margin-top:12px;" @click="tab = 'generate'">Forge</button>
+              </div>
+              <template v-else>
+              <div class="run-controls-panel">
+              <div class="run-controls-panel__row run-controls-panel__row--selects">
+                <label class="run-controls-inline-label" for="run-scope-select">Run scope</label>
+                <select id="run-scope-select" v-model="run.scope" @change="runOnScopeChange">
+                  <option value="playbook">Single play</option>
+                  <option value="category">All probes in category</option>
+                </select>
+                <span v-if="run.scope === 'category' && runSelectedCategory" class="help-popover-wrap">
+                  <button
+                    type="button"
+                    class="btn-icon-help help-popover-trigger"
+                    tabindex="0"
+                    aria-label="Category run scope help"
+                  >?</button>
+                  <div class="help-popover" role="tooltip">
+                    Runs all generated probe suites for {{ runSelectedCategory.playbooks.length }} play{{ runSelectedCategory.playbooks.length === 1 ? '' : 's' }} in {{ runSelectedCategory.label }}.
+                  </div>
+                </span>
+                <label class="run-controls-inline-label" for="run-strategy-select">Strategy</label>
+                <select
+                  v-if="run.scope === 'playbook'"
+                  id="run-strategy-select"
+                  v-model="run.strategy"
+                  @change="runOnStrategyChange"
+                  :disabled="!run.playbook"
+                >
+                  <option value="">Select…</option>
+                  <option value="__all__">All strategies</option>
+                  <option
+                    v-for="s in availableRunStrategies"
+                    :key="s.slug"
+                    :value="s.slug"
+                    :disabled="isStrategyOptionDisabled(s.slug)"
+                  >{{ s.label }}{{ strategyOptionDisabledSuffix(s.slug) }}</option>
+                </select>
+                <select v-else id="run-strategy-select" disabled>
+                  <option>All available strategies</option>
+                </select>
+                <span v-if="multiTurnBlockedNote" class="help-popover-wrap">
+                  <button
+                    type="button"
+                    class="btn-icon-help help-popover-trigger"
+                    tabindex="0"
+                    aria-label="Unavailable strategies help"
+                  >?</button>
+                  <div class="help-popover" role="tooltip">{{ multiTurnBlockedNote }}</div>
+                </span>
+              </div>
+              <div class="run-controls-panel__row run-controls-panel__row--opts">
+                <label
+                  class="run-controls-check"
+                  :class="{ 'run-controls-check--disabled': run.autoRun }"
+                  for="assess"
+                >
+                  <input type="checkbox" id="assess" v-model="run.assess" :disabled="run.autoRun">
+                  <span>Run security assessment after</span>
+                </label>
+                <span v-if="run.autoRun" class="help-popover-wrap">
+                  <button
+                    type="button"
+                    class="btn-icon-help help-popover-trigger"
+                    tabindex="0"
+                    aria-label="Assessment required when keep improving is on"
+                  >?</button>
+                  <div class="help-popover" role="tooltip">
+                    When keep improving is on, every round is scored so the next improvement can learn from refusals and outcomes. The loop also stops early when risk reaches a level you selected.
+                  </div>
+                </span>
+                <span
+                  v-if="run.scope === 'playbook'"
+                  class="run-hunt-mode"
+                  role="group"
+                  aria-label="Hunt mode"
+                >
+                  <span class="run-hunt-mode__label">Hunt mode</span>
+                  <label
+                    v-for="opt in HUNT_MODE_OPTIONS"
+                    :key="'hunt-' + opt.value"
+                    class="run-hunt-mode__opt"
+                  >
+                    <input
+                      type="radio"
+                      name="runHuntMode"
+                      :value="opt.value"
+                      v-model="run.huntMode"
+                    >
+                    {{ opt.label }}
+                  </label>
+                  <span class="help-popover-wrap">
+                    <button
+                      type="button"
+                      class="btn-icon-help help-popover-trigger"
+                      tabindex="0"
+                      aria-label="Hunt mode help"
+                    >?</button>
+                    <div class="help-popover" role="tooltip">
+                      <p><strong>Compliance</strong> - baseline safety sharpening (freeze proven wrappers, escalate the proof slot).</p>
+                      <p><strong>Bug Bounty</strong> - self-improving hunter on this play: keep and mutate winning prompts, invent new attack mechanisms when stuck. Default.</p>
+                      <p><strong>Open Hunt</strong> - Premium: Bug Bounty plus hypothesis broaden when stagnant.</p>
+                    </div>
+                  </span>
+                </span>
+                <p
+                  v-if="run.scope === 'playbook'"
+                  class="premium-inline-note"
+                >
+                  Open Hunt is
+                  <a :href="PREMIUM_URL" target="_blank" rel="noopener noreferrer">Premium</a>.
+                </p>
+              </div>
+              <div
+                v-if="run.scope === 'playbook'"
+                class="run-controls-panel__row run-controls-panel__row--opts"
+              >
+                <label
+                  class="run-controls-check"
+                  :class="{ 'run-controls-check--disabled': !!autoRunBlockedReason }"
+                  for="autoRun"
+                >
+                  <input type="checkbox" id="autoRun" v-model="run.autoRun" :disabled="!!autoRunBlockedReason">
+                  <span>Keep improving and re-running</span>
+                </label>
+                <span
+                  v-if="run.autoRun"
+                  class="auto-run-stop-levels"
+                  role="group"
+                  aria-label="Stop when risk reaches"
+                >
+                  <span class="auto-run-stop-levels__label">Stop when risk reaches</span>
+                  <label class="auto-run-stop-levels__opt">
+                    <input
+                      type="checkbox"
+                      :checked="run.stopLevels.medium"
+                      @change="toggleAutoRunStopLevel('medium', $event.target.checked)"
+                    >
+                    Medium
+                  </label>
+                  <label class="auto-run-stop-levels__opt">
+                    <input
+                      type="checkbox"
+                      :checked="run.stopLevels.high"
+                      @change="toggleAutoRunStopLevel('high', $event.target.checked)"
+                    >
+                    High
+                  </label>
+                  <label class="auto-run-stop-levels__opt">
+                    <input
+                      type="checkbox"
+                      :checked="run.stopLevels.critical"
+                      @change="toggleAutoRunStopLevel('critical', $event.target.checked)"
+                    >
+                    Critical
+                  </label>
+                  <label class="auto-run-stop-levels__opt auto-run-max-rounds">
+                    <span class="auto-run-stop-levels__label">Max rounds</span>
+                    <select
+                      id="autoRunMaxRounds"
+                      class="auto-run-max-rounds__select"
+                      v-model.number="run.maxRounds"
+                      aria-label="Maximum improvement rounds"
+                    >
+                      <option v-for="n in LOOP_MAX_ROUND_OPTIONS" :key="'run-max-' + n" :value="n">{{ n }}</option>
+                    </select>
+                  </label>
+                </span>
+                <span class="help-popover-wrap">
+                  <button
+                    type="button"
+                    class="btn-icon-help help-popover-trigger"
+                    tabindex="0"
+                    aria-label="Keep improving help"
+                  >?</button>
+                  <div class="help-popover" role="tooltip">
+                    <p>Keep improving and re-running until the worst risk reaches a level you selected (up to Max rounds, hard cap {{ LOOP_MAX_ROUNDS_CAP }}). Each improvement plan is accepted automatically. Default stop levels are High and Critical; Medium also stops on high or critical.</p>
+                    <p>After a partial win or exploit, the next round keeps the working prompt shell and swaps in a stronger follow-up ask for the same play.</p>
+                    <p>Needs a concrete strategy (not All strategies) - for example zero-shot or jailbreak.</p>
+                  </div>
+                </span>
+                <label class="run-controls-check" for="customEnhance">
+                  <input type="checkbox" id="customEnhance" v-model="run.customEnhance">
+                  <span>Add improvement guidance</span>
+                </label>
+                <span class="help-popover-wrap">
+                  <button
+                    type="button"
+                    class="btn-icon-help help-popover-trigger"
+                    tabindex="0"
+                    aria-label="Improvement guidance help"
+                  >?</button>
+                  <div class="help-popover" role="tooltip">
+                    Advises the improver only - never pasted into probe prompts.
+                  </div>
+                </span>
+              </div>
+              <div v-if="run.scope === 'playbook' && run.customEnhance" class="run-custom-enhance">
+                <div class="run-custom-enhance__head">
+                  <label for="customEnhanceText">Improvement guidance</label>
+                  <label class="run-custom-enhance__force" for="customOverridesFreeze">
+                    <input type="checkbox" id="customOverridesFreeze" v-model="run.customOverridesFreeze">
+                    <span>Always apply my guidance</span>
+                    <span class="help-popover-wrap">
+                      <button
+                        type="button"
+                        class="btn-icon-help help-popover-trigger"
+                        tabindex="0"
+                        aria-label="Force instructions help"
+                      >?</button>
+                      <div class="help-popover" role="tooltip">
+                        Improvement instructions advise the improver (what to prioritize / how to read outcomes). They are never pasted into probe prompts.
+                        On pause rounds, guidance is advisory only so built-in steps stay in charge.
+                        Check this to keep your guidance required every round (still advice only - never prompt text).
+                        Guidance and this checkbox are remembered for this site/component; start a new Enhance for changes to take effect.
+                      </div>
+                    </span>
+                  </label>
+                </div>
+                <textarea
+                  id="customEnhanceText"
+                  v-model="run.customEnhanceText"
+                  rows="2"
+                  placeholder="e.g. Treat SYSTEM_PROMPT_LEAK_CONFIRMED as a safety block - try a quieter wrapper next round"
+                ></textarea>
+              </div>
+              <div v-if="runUploadWarning" class="hint-banner" style="margin-top:8px;border-color:var(--yellow);">
+                <p>{{ runUploadWarning }}</p>
+              </div>
+              <div v-if="runArtifactStatus.length" class="cfg-section" style="margin-top:8px;">
+                <div class="cfg-section-title">Attached files for media probes</div>
+                <table class="results-table">
+                  <thead><tr><th class="col-row-expand"></th><th>Prompt</th><th>Status</th><th>Path / generator</th></tr></thead>
+                  <tbody>
+                    <tr v-for="row in runArtifactStatus" :key="row.id">
+                      <td class="row-expand-cell">
+                        <button
+                          type="button"
+                          class="btn-icon row-expand-btn"
+                          title="Expand row"
+                          aria-label="Expand row"
+                          @click.stop="openRunArtifactRowDetail(row)"
+                        >
+                          <svg class="row-expand-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                            <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                          </svg>
+                        </button>
+                      </td>
+                      <td><code>{{ row.id }}</code></td>
+                      <td>{{ row.status }}</td>
+                      <td><code>{{ row.path || row.generator || '-' }}</code></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="run-controls-panel__actions">
+                <button
+                  class="btn btn-primary btn-sm"
+                  @click="startRunTests"
+                  :disabled="runJobActive || (run.scope === 'playbook' && run.autoRun) || (run.scope === 'category' ? !run.category : (!run.playbook || !run.strategy))"
+                  :title="(run.scope === 'playbook' && run.autoRun) ? 'Turn off keep improving to use Attack, or use Retarget and keep attacking for the closed loop' : ''"
+                >
+                  {{ runJobActive ? (runJobStatusLabel || 'Attacking…') : (run.scope === 'category' ? 'Attack Category' : (run.strategy === '__all__' ? 'Attack All Strategies' : 'Attack')) }}
+                </button>
+                <button
+                  v-if="run.scope === 'playbook'"
+                  class="btn btn-secondary btn-sm"
+                  @click="startReconRound"
+                  :disabled="runJobActive || !canReconRound"
+                  :title="reconRoundButtonTitle"
+                >
+                  {{ runJobActive ? 'Recon round active…' : 'Recon Round' }}
+                </button>
+                <button
+                  v-if="run.scope === 'playbook'"
+                  class="btn btn-secondary btn-sm"
+                  @click="startEnhanceLoop"
+                  :disabled="runJobActive || !canEnhanceRerun"
+                  :title="enhanceRunButtonTitle"
+                >
+                  {{ runJobActive ? 'Retarget loop active…' : (run.autoRun ? 'Retarget and keep attacking' : 'Retarget and attack') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  :class="{ 'btn-troubleshoot-alert': runBlockedInfo }"
+                  @click="onRunTroubleshoot"
+                >Troubleshoot</button>
+              </div>
+              <div
+                v-if="runJobActive && (canSkipCurrentRunPrompt || showEnhanceTheoryModal)"
+                class="run-active-banner"
+              >
+                <button
+                  v-if="canSkipCurrentRunPrompt"
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  @click="skipCurrentRunPrompt"
+                  :disabled="runSkipCurrentBusy"
+                  title="Skip the in-flight prompt and record a null response"
+                >
+                  {{ runSkipCurrentBusy ? 'Skipping…' : 'Skip current' }}
+                </button>
+                <button v-if="showEnhanceTheoryModal" type="button" class="btn btn-ghost btn-sm" @click="showEnhanceTheoryModal = true">Review improvement plan</button>
+              </div>
+              </div>
+              </template>
+              <div v-if="showRunCloudflareModal && (pendingRunAfterCloudflare || runCloudflareTestsStopped)" class="run-auth-save-bar">
+                <div class="run-auth-save-text">
+                  <strong>Cloudflare verification.</strong>
+                  <span v-if="runCloudflareTestsStopped">Probes stopped - apply browser settings in the dialog, then re-run.</span>
+                  <span v-else>Tick “Verify you are human” in the browser window. Probes resume when the challenge clears.</span>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" @click="showRunCloudflareModal = true">Show instructions</button>
+              </div>
+              <div v-if="loginRunning && pendingRunAfterLogin" class="run-auth-save-bar">
+                <div class="run-auth-save-text">
+                  <strong>Sign-in in progress.</strong> Complete login in the browser window, then save your session.
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" @click="saveAuth" :disabled="authSaving">
+                  {{ authSaving ? 'Saving…' : 'Save session' }}
+                </button>
+                <p v-if="authSaveError" class="run-auth-save-error">{{ authSaveError }}</p>
+              </div>
+              </template>
+            </div>
+
+            <div v-if="logs.runs.length" class="run-results-history">
+              <label class="run-results-history-label" for="run-log-select">Run log</label>
+              <select
+                id="run-log-select"
+                class="run-results-history-select"
+                v-model="selectedRunLogPath"
+                @change="onSelectedRunLogChange"
+                :disabled="runResultsLoading || (findingsMetricsWindow !== 'last_run')"
+                :title="findingsMetricsWindow !== 'last_run' ? 'Switch Window to Last run to pick an individual log' : 'Select a run log'"
+              >
+                <option v-for="(run, i) in logs.runs" :key="run.path" :value="run.path">
+                  {{ formatRunLogLabel(run, i) }}
+                </option>
+              </select>
+            </div>
+
+            <div v-if="runResultsLoading && !runResults.length" class="run-results-loading">Loading results…</div>
+            <div
+              v-else-if="runResults.length || logs.runs.length"
+              class="run-results-section"
+              :class="{
+                'run-results-section--minimized': runResultsLayout === 'minimized' && runResults.length,
+                'run-results-section--maximized': runResultsLayout === 'maximized' && runResults.length,
+              }"
+            >
+              <div v-if="runResultsLoading && runResults.length" class="run-results-loading run-results-loading--inline">Refreshing…</div>
+              <div
+                class="run-results-panel"
+                :class="{ 'run-results-panel--minimized': runResultsLayout === 'minimized' && runResults.length }"
+              >
+                <div
+                  class="findings-metrics findings-metrics--in-panel"
+                  role="group"
+                  aria-label="Run results window"
+                >
+                  <span
+                    v-if="runResults.length"
+                    class="results-panel-title"
+                  >Results <span class="run-results-count">({{ runResults.length }})</span></span>
+                  <template v-if="runResultsLayout !== 'minimized' || !runResults.length">
+                    <label class="findings-metrics-window">
+                      <span class="findings-metrics-window-label">Window</span>
+                      <select
+                        v-model="findingsMetricsWindow"
+                        class="findings-metrics-window-select"
+                        aria-label="Results time window"
+                      >
+                        <option
+                          v-for="w in FINDINGS_METRICS_WINDOWS"
+                          :key="w.id"
+                          :value="w.id"
+                        >{{ w.label }}</option>
+                      </select>
+                    </label>
+                  </template>
+                  <div v-if="runResults.length" class="results-layout-actions">
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="toggleRunResultsMinimize"
+                      :title="runResultsLayout === 'minimized' ? 'Expand results table' : 'Minimize results table'"
+                      :aria-label="runResultsLayout === 'minimized' ? 'Expand results table' : 'Minimize results table'"
+                      :aria-expanded="runResultsLayout !== 'minimized'"
+                    >
+                      <svg
+                        v-if="runResultsLayout === 'minimized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 6.5 8 11l5-4.5H3z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M3 4h10v1.5H3V4zm0 6.5h10V12H3v-1.5z"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="results-layout-btn"
+                      @click="toggleRunResultsMaximize"
+                      :title="runResultsLayout === 'maximized' ? 'Restore default layout' : 'Maximize results table'"
+                      :aria-label="runResultsLayout === 'maximized' ? 'Restore default layout' : 'Maximize results table'"
+                    >
+                      <svg
+                        v-if="runResultsLayout === 'maximized'"
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M5 3h8v8h-1.5V4.5H5V3zM3 5h8v8H3V5zm1.5 1.5v5h5v-5h-5z"/>
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 16 16"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div
+                  v-if="runResults.length"
+                  v-show="runResultsLayout !== 'minimized'"
+                  class="run-results-table-wrap"
+                >
+                <table class="results-table run-results-table">
+                  <colgroup>
+                    <col class="col-row-expand">
+                    <col class="col-index">
+                    <col class="col-prompt">
+                    <col class="col-response">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>{{ runResultsHasMultiTurn ? 'Turn' : '#' }}</th>
+                      <th>Prompt</th>
+                      <th>Response</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(r, i) in runResults" :key="i" :class="runResultRowClasses(r)">
+                      <td class="row-expand-cell">
+                        <button
+                          type="button"
+                          class="btn-icon row-expand-btn"
+                          title="Expand row"
+                          aria-label="Expand row"
+                          @click.stop="openRunResultRowDetail(r)"
+                        >
+                          <svg class="row-expand-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                            <path fill="currentColor" d="M1 1h5v2H3v3H1V1zm9 0h5v5h-2V3h-3V1zM1 10h2v3h3v2H1v-5zm12 0h2v5h-5v-2h3v-3z"/>
+                          </svg>
+                        </button>
+                      </td>
+                      <td class="run-results-index-cell">
+                        <template v-if="r.isMultiTurn">
+                          <span class="run-results-turn-frac" :title="r.batchLabel">{{ r.turnFraction }}</span>
+                          <span v-if="r.batchFirst" class="run-results-batch-tag">{{ r.batchShort }}</span>
+                        </template>
+                        <template v-else>{{ r.label }}</template>
+                      </td>
+                      <td
+                        class="cell-prompt cell-copyable"
+                        :class="{ 'cell-copied': runResultCellCopied(i, 'prompt') }"
+                        title="Click to copy prompt"
+                        @click="copyRunResultText(r.input, i, 'prompt')"
+                      >
+                        <span v-if="runResultCellCopied(i, 'prompt')" class="cell-copy-badge">Copied!</span>
+                        <span
+                          v-if="r.submissionOutcome && r.submissionOutcome !== 'executed'"
+                          class="run-results-outcome-badge"
+                          :class="'run-results-outcome-badge--' + r.submissionOutcome"
+                          :title="r.rejectionSignals && r.rejectionSignals.length ? r.rejectionSignals.join(', ') : ''"
+                          @click.stop
+                        >{{ runOutcomeLabel(r.submissionOutcome) }}</span>
+                        {{ r.input }}
+                      </td>
+                      <td
+                        class="cell-response cell-copyable"
+                        :class="{ 'cell-copied': runResultCellCopied(i, 'response') }"
+                        title="Click to copy response"
+                        @click="copyRunResultText(r.response, i, 'response')"
+                      >
+                        <span v-if="runResultCellCopied(i, 'response')" class="cell-copy-badge">Copied!</span>
+                        <template v-if="r.submissionOutcome === 'client_rejected' && !r.response">
+                          <span class="run-results-outcome-note">Prompt restored - not executed</span>
+                        </template>
+                        <template v-else-if="expandedRunRows[i] || !r.response || r.response.length <= 200">
+                          {{ r.response || '-' }}
+                        </template>
+                        <template v-else>
+                          {{ r.response.slice(0, 200) }}<span
+                            class="run-results-expand-hint"
+                            title="Expand/collapse"
+                            @click.stop="toggleRunRow(i)"
+                          >… ▼</span>
+                        </template>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                </div>
+                <div
+                  v-else-if="!runResultsLoading && logs.runs.length"
+                  v-show="runResultsLayout !== 'minimized'"
+                  class="run-results-empty run-results-empty--in-panel"
+                >
+                  No prompt/response entries in this window.
+                </div>
+              </div>
+            </div>
+            <div v-else-if="logs.runs.length && selectedRunLogPath" class="run-results-empty">
+              No prompt/response entries in this run log.
+            </div>
+            <div v-else-if="!runResultsLoading && !runResults.length && !logs.runs.length && site && component" class="run-results-empty">
+              No run logs yet. Attack with a probe suite to see results here.
+            </div>
+          </div>
+        </template>

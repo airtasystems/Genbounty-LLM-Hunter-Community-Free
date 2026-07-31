@@ -1,0 +1,73 @@
+# =============================================================================
+# Component config - browser-bot/sites/<site>/<component>/config.yaml
+# =============================================================================
+#
+# Tells browser-bot how to drive this AI product's UI: where to log in, which page
+# to open, what to fill in, how to submit, and where to read the model response.
+#
+# Precedence for settings: overrides here beat site config, config.py/.env, then
+# config.defaults.yaml. See repo-root config.defaults.yaml for all settings keys.
+#
+# Prefer stable CSS selectors: #id, [name="..."], [data-testid="..."], tag.class
+# Playwright also supports: button:has-text("Send") scoped under a landmark.
+#
+# Web UI: Settings → Component Config (or run Discovery to auto-fill submission).
+
+# --- Legacy / API fetch (optional) -------------------------------------------
+# urls: HTTP GET targets for non-UI fetch modes
+# posts: POST targets [{url, data?, json?, headers?}]
+urls: []
+posts: []
+
+# --- Auth --------------------------------------------------------------------
+# Page opened for "Add Login" / manual sign-in. Usually the site root or /login.
+# http:// for localhost; https:// for production hosts.
+login_url: "https://Gemini"
+
+# Optional (usually site-level): refresh_url, refresh_mode (cookie | both), endpoint_url
+
+# --- API submission (direct HTTP - no browser selectors required) -------------
+submission:
+  # Transport: ui (browser automation) | api (HTTP endpoint)
+  transport: api
+
+  # Full URL of the chat/completion endpoint. Use {{model}} in URL/body when needed.
+  api_url: "https://generativelanguage.googleapis.com/v1beta/models/{{model}}:generateContent"
+
+  api_model: "gemini-2.5-flash-lite"
+
+  # HTTP method. Options: POST | GET | PUT | PATCH
+  api_method: POST
+
+  # Optional request headers (merged with saved auth headers).
+  api_headers:
+    Content-Type: "application/json"
+
+  # JSON request body. Use {{prompt}} where the test prompt should be inserted.
+  api_body:
+    contents:
+    - role: user
+      parts:
+      - text: '{{prompt}}'
+
+  # Dot path into JSON response for assistant text (e.g. response or data.message).
+  api_response_path: "candidates.0.content.parts.0.text"
+
+
+# --- Settings overrides (optional) ---------------------------------------------
+# Same keys as Settings → Browser Config and Cache Control. Omit keys to inherit.
+# Full list and allowed values: see config.defaults.yaml at repo root.
+#
+# settings:
+#   gemini_use_cache: false          # true | false
+#   intel_credentials_and_paths: true  # auto-extract credentials/paths after risk assessment
+#   FETCH_METHOD: pool               # auto | pool | cluster | human
+#   HEADLESS: true                   # true | false
+#   HUMAN_COUNTRY: UK                # US | UK | DE | FR | JP | CA | AU | NL | ES | IT
+#   CHROME_CHANNEL: chromium         # chromium | chrome | chrome-beta | msedge
+#   BLOCKED_TYPES: [image, font]     # image | font | media | stylesheet
+#   POOL_SIZE: 1
+#   POOL_CLUSTER_HUMAN_LIKE: true
+#   API_CONCURRENCY: 2
+#   EVASION_REQUEST_DELAY_S: 0.5
+#   RUN_SCREENSHOT_INTERVAL_S: 0.0  # 0 = disabled; 1–120 = interval seconds

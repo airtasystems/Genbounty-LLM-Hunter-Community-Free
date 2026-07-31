@@ -1,0 +1,78 @@
+        <!-- Generate -->
+        <template v-if="tab === 'generate'">
+          <div class="generate-view" :class="{ 'generate-view--results-maximized': genTransformsMaximizedActive }">
+            <div class="generate-view-controls">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <h2 style="margin:0;">Forge</h2>
+              </div>
+              <!-- @include scope-readonly-table.html -->
+              <div v-if="!site || !component" class="run-tests-empty">
+                Select a site and component in the header to use Forge.
+              </div>
+              <template v-else>
+                <div class="run-controls-panel">
+                  <div class="run-controls-panel__row run-controls-panel__row--selects">
+                    <label class="run-controls-inline-label" for="gen-strategy-select">Strategy</label>
+                    <select
+                      id="gen-strategy-select"
+                      v-model="gen.strategy"
+                      :disabled="!gen.playbook"
+                    >
+                      <option value="__all__">All strategies</option>
+                      <option
+                        v-for="s in availableGenerateStrategies"
+                        :key="s"
+                        :value="s"
+                        :disabled="isStrategyOptionDisabled(s)"
+                      >{{ pretty(s) }}{{ strategyOptionDisabledSuffix(s) }}</option>
+                    </select>
+                    <span v-if="multiTurnBlockedNote" class="help-popover-wrap">
+                      <button
+                        type="button"
+                        class="btn-icon-help help-popover-trigger"
+                        tabindex="0"
+                        aria-label="Unavailable strategies help"
+                      >?</button>
+                      <div class="help-popover" role="tooltip">{{ multiTurnBlockedNote }}</div>
+                    </span>
+                  </div>
+                  <p class="premium-inline-note">
+                    Adaptive strategy is
+                    <a :href="PREMIUM_URL" target="_blank" rel="noopener noreferrer">Premium</a>.
+                  </p>
+                  <div
+                    v-if="targetCapabilities.multi_turn !== false"
+                    class="run-controls-panel__row run-controls-panel__row--opts"
+                  >
+                    <label class="run-controls-check" for="gen-multimodal">
+                      <input type="checkbox" id="gen-multimodal" v-model="gen.multimodal">
+                      <span>Also generate file, image, and audio probes</span>
+                    </label>
+                    <span class="help-popover-wrap">
+                      <button
+                        type="button"
+                        class="btn-icon-help help-popover-trigger"
+                        tabindex="0"
+                        aria-label="Media probe generation help"
+                      >?</button>
+                      <div class="help-popover" role="tooltip">
+                        When checked, generation also builds probes delivered as files, documents, images, QR codes, CSV, or audio. The selected strategy is kept for context; delivery uses the file/media generator.
+                      </div>
+                    </span>
+                  </div>
+                  <div class="run-controls-panel__actions">
+                    <button
+                      class="btn btn-primary"
+                      @click="startGenerate"
+                      :disabled="!site || !component || !gen.strategy || !gen.playbook"
+                    >
+                      {{ generateButtonLabel }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- @include prompt-transforms-panel.html -->
+          </div>
+        </template>

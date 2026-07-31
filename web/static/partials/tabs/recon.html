@@ -1,0 +1,372 @@
+        <!-- Recon -->
+        <template v-if="tab === 'recon'">
+          <h2>Recon</h2>
+
+          <div v-if="!site || !component" class="cfg-note" style="margin-bottom:16px;">
+            Select a site and component in the header before running recon.
+          </div>
+
+          <template v-else>
+            <div class="cfg-section recon-probe">
+              <div class="cfg-section-title">Probe mode</div>
+              <div class="scope-readonly-table" role="group" aria-label="Connected target probe summary">
+                <table>
+                  <tbody>
+                    <tr>
+                      <th scope="row">Transport</th>
+                      <td><span class="scope-readonly-val">{{ reconConnectedSummary.transport || '-' }}</span></td>
+                      <th scope="row">Target</th>
+                      <td>
+                        <span
+                          class="scope-readonly-val scope-readonly-val--wide"
+                          :title="reconConnectedSummary.target"
+                        >{{ reconConnectedSummary.target || '-' }}</span>
+                      </td>
+                      <th scope="row">Model</th>
+                      <td><span class="scope-readonly-val">{{ reconConnectedSummary.model || '-' }}</span></td>
+                      <th scope="row">Auth</th>
+                      <td>
+                        <span class="scope-readonly-val">{{
+                          authConfigured
+                            ? (authMode === 'none' ? 'Public access' : authMode === 'api_key' ? 'API key' : 'UI session')
+                            : 'Not configured'
+                        }}</span>
+                      </td>
+                      <td class="scope-readonly-config-cell">
+                        <button
+                          type="button"
+                          class="btn-icon-config"
+                          :title="reconMode === 'manual_url' ? 'Use connected target' : 'Probe a manual URL'"
+                          :aria-label="reconMode === 'manual_url' ? 'Use connected target' : 'Probe a manual URL'"
+                          :aria-pressed="reconMode === 'manual_url' ? 'true' : 'false'"
+                          @click="reconMode = reconMode === 'manual_url' ? 'connected' : 'manual_url'"
+                        >⚙</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-if="reconMode === 'connected' && compCfgEmpty" class="cfg-note">Connect Target step 2 is incomplete - recon will use login URL or site defaults. Use ⚙ to probe a specific URL.</p>
+              <template v-if="reconMode === 'manual_url'">
+                <div class="form-row">
+                  <label>URL</label>
+                  <input v-model="reconManualUrl" placeholder="https://example.com/chat" class="recon-probe-url">
+                </div>
+                <p class="cfg-note">Uses saved auth for this component when available. Does not require a complete Connect Target config. Use ⚙ again to return to the connected target.</p>
+              </template>
+
+              <div class="recon-probe-actions">
+                <button type="button" class="btn btn-primary" @click="startRecon" :disabled="reconRunning || (reconMode === 'manual_url' && !reconManualUrl.trim())">
+                  {{ reconRunning ? 'Running recon…' : 'Run Recon' }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" @click="loadRecon" :disabled="reconLoading">Reload</button>
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :class="reconResetArmed ? 'btn-primary' : 'btn-ghost'"
+                  @click="resetRecon"
+                  :disabled="!reconExists"
+                  :title="reconResetArmed ? 'Click again to confirm delete recon.json' : 'Delete recon.json for this component'"
+                >{{ reconResetButtonLabel }}</button>
+                <span class="help-popover-wrap">
+                  <button
+                    type="button"
+                    class="btn-icon-help help-popover-trigger"
+                    tabindex="0"
+                    aria-label="Probe mode help"
+                  >?</button>
+                  <div class="help-popover" role="tooltip">
+                    Phase 1: headless scan. Phase 2: visible browser + UI capability prompt (when Connect Target config is complete). Writes recon.json.
+                  </div>
+                </span>
+              </div>
+              <p v-if="reconError" style="color:var(--red);font-size:13px;margin-top:8px;">{{ reconError }}</p>
+              <p v-if="reconMsg" style="color:var(--green);font-size:13px;margin-top:8px;">{{ reconMsg }}</p>
+            </div>
+
+            <div class="cfg-section recon-from-report">
+              <div class="cfg-section-title recon-from-report-title">
+                <span>Recon from assessment report</span>
+                <span v-if="!logs.reports.length" class="help-popover-wrap">
+                  <button
+                    type="button"
+                    class="btn-icon-help help-popover-trigger"
+                    tabindex="0"
+                    aria-label="Recon from assessment report help"
+                  >?</button>
+                  <div class="help-popover" role="tooltip">
+                    Review a <code>pipeline_report.json</code> from a prior assessed run and merge the most
+                    revealing target responses into <code>intel/{playbook_id}.json</code>, aligned with the
+                    playbook's evaluation lens. Each extract is followed by Grok consolidation to keep only
+                    valuable recon intel. No new probes are sent to the target.
+                  </div>
+                </span>
+              </div>
+              <div v-if="!logs.reports.length" class="cfg-note" style="margin-top:0;">
+                No assessed reports yet. Run Attack and Analysis first (Analysis tab).
+              </div>
+              <template v-else>
+                <div class="form-row">
+                  <label>Report</label>
+                  <select
+                    v-model="reconReportPath"
+                    class="recon-from-report-select"
+                    :disabled="reconAggregateAllReports"
+                  >
+                    <option value="" disabled>Select pipeline_report.json</option>
+                    <option v-for="r in logs.reports" :key="r.path" :value="r.path">{{ r.name }}</option>
+                  </select>
+                  <label class="checkbox-row recon-from-report-check">
+                    <input type="checkbox" v-model="reconAggregateAllReports" />
+                    <span>Aggregate all reports ({{ logs.reports.length }}) - oldest first</span>
+                  </label>
+                </div>
+                <div class="recon-probe-actions">
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    @click="startReconFromReport"
+                    :disabled="reconFromReportRunning || (!reconAggregateAllReports && !reconReportPath)"
+                  >
+                    {{ reconFromReportRunning
+                      ? (reconAggregateAllReports ? 'Aggregating reports…' : 'Extracting recon…')
+                      : (reconAggregateAllReports ? 'Aggregate all reports' : 'Extract intel from report') }}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="loadLogs" :disabled="reconLoading">Refresh reports</button>
+                  <span class="help-popover-wrap">
+                    <button
+                      type="button"
+                      class="btn-icon-help help-popover-trigger"
+                      tabindex="0"
+                      aria-label="Recon from assessment report help"
+                    >?</button>
+                    <div class="help-popover" role="tooltip">
+                      Review a <code>pipeline_report.json</code> from a prior assessed run and merge the most
+                      revealing target responses into <code>intel/{playbook_id}.json</code>, aligned with the
+                      playbook's evaluation lens. Each extract is followed by Grok consolidation to keep only
+                      valuable recon intel. No new probes are sent to the target.
+                    </div>
+                  </span>
+                </div>
+              </template>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                <span>Component baseline</span>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    @click="saveRecon"
+                    :disabled="reconSaving || (reconViewMode === 'json' && !reconJsonText.trim())"
+                  >
+                    {{ reconSaving ? 'Saving…' : 'Save' }}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="reconRevertJson" :disabled="!reconDirty">Revert</button>
+                </div>
+              </div>
+              <p class="cfg-note" style="margin-top:0;">One-time browser/API probe profile. Updated only by Run Recon.</p>
+
+              <div class="editor-view-tabs">
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :class="reconViewMode === 'overview' ? 'btn-primary' : 'btn-ghost'"
+                  @click="setReconViewMode('overview')"
+                >Overview</button>
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :class="reconViewMode === 'json' ? 'btn-primary' : 'btn-ghost'"
+                  @click="setReconViewMode('json')"
+                >JSON</button>
+              </div>
+
+              <div v-if="reconLoading" class="cfg-note">Loading…</div>
+              <template v-else-if="reconViewMode === 'overview'">
+                <div v-if="reconRecord" class="recon-overview">
+                  <div class="form-row">
+                    <label>Probed</label>
+                    <span>{{ prettyScalar(reconRecord.probed_at) }}</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Source mode</label>
+                    <span>{{ prettyScalar(reconRecord.source_mode) }}</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Target URL</label>
+                    <span style="word-break:break-all;">{{ prettyScalar(reconRecord.target_url) }}</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Transport</label>
+                    <span>{{ prettyScalar(reconRecord.transport) }}</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Host</label>
+                    <span>{{ prettyScalar(reconRecord.host) }}</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Vendor</label>
+                    <span>{{ prettyScalar(reconRecord.vendor) }}</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Product</label>
+                    <span>{{ prettyScalar(reconRecord.product_name) }}</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Description</label>
+                    <p class="pretty-field-text">{{ prettyScalar(reconRecord.description) }}</p>
+                  </div>
+                  <div class="form-row">
+                    <label>Provider</label>
+                    <span>{{ prettyScalar(reconRecord.provider) }}</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Inference type</label>
+                    <span>{{ prettyScalar(reconRecord.inference_type) }}</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Model hints</label>
+                    <div v-if="asList(reconRecord.model_hints).length" class="recon-chips">
+                      <span v-for="(hint, i) in asList(reconRecord.model_hints)" :key="'mh'+i" class="recon-chip">{{ intelEntryText(hint) || hint }}</span>
+                    </div>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Capabilities</label>
+                    <div v-if="asList(reconRecord.capabilities).length" class="recon-chips">
+                      <span v-for="(cap, i) in asList(reconRecord.capabilities)" :key="'cap'+i" class="recon-chip">{{ cap }}</span>
+                    </div>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Tools &amp; plugins</label>
+                    <ul v-if="asList(reconRecord.tools).length" class="recon-tool-list">
+                      <li v-for="(tool, i) in asList(reconRecord.tools)" :key="'tool'+i">
+                        <strong>{{ tool?.name || 'Unnamed' }}</strong>
+                        <span> ({{ prettyScalar(tool?.type) }})</span>
+                        <span> - {{ prettyScalar(tool?.description) }}</span>
+                      </li>
+                    </ul>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Integrations</label>
+                    <div v-if="asList(reconRecord.integrations).length" class="recon-chips">
+                      <span v-for="(item, i) in asList(reconRecord.integrations)" :key="'int'+i" class="recon-chip">{{ intelEntryText(item) || item }}</span>
+                    </div>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>API endpoints</label>
+                    <ul v-if="asList(reconRecord.api_endpoints).length" class="recon-tool-list">
+                      <li v-for="(ep, i) in asList(reconRecord.api_endpoints)" :key="'ep'+i">{{ intelEntryText(ep) || prettyComplex(ep) }}</li>
+                    </ul>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Auth mechanisms</label>
+                    <ul v-if="asList(reconRecord.auth_mechanisms).length" class="recon-tool-list">
+                      <li v-for="(auth, i) in asList(reconRecord.auth_mechanisms)" :key="'auth'+i">{{ intelEntryText(auth) || prettyComplex(auth) }}</li>
+                    </ul>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Tech stack</label>
+                    <div v-if="asList(reconRecord.tech_stack).length" class="recon-chips">
+                      <span v-for="(item, i) in asList(reconRecord.tech_stack)" :key="'tech'+i" class="recon-chip">{{ intelEntryText(item) || item }}</span>
+                    </div>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>UI features</label>
+                    <ul v-if="asList(reconRecord.ui_features).length" class="recon-tool-list">
+                      <li v-for="(item, i) in asList(reconRecord.ui_features)" :key="'ui'+i">{{ intelEntryText(item) || prettyComplex(item) }}</li>
+                    </ul>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Security observations</label>
+                    <ul v-if="asList(reconRecord.security_observations).length" class="recon-tool-list">
+                      <li v-for="(item, i) in asList(reconRecord.security_observations)" :key="'sec'+i">{{ intelEntryText(item) || prettyComplex(item) }}</li>
+                    </ul>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Attack surface notes</label>
+                    <ul v-if="asList(reconRecord.attack_surface_notes).length" class="recon-tool-list">
+                      <li v-for="(item, i) in asList(reconRecord.attack_surface_notes)" :key="'asn'+i">{{ intelEntryText(item) || prettyComplex(item) }}</li>
+                    </ul>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Evidence</label>
+                    <pre v-if="prettyComplex(reconRecord.evidence) !== '-'" class="pretty-pre">{{ prettyComplex(reconRecord.evidence) }}</pre>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Analyst notes</label>
+                    <p class="pretty-field-text">{{ prettyScalar(reconRecord.analyst_notes) }}</p>
+                  </div>
+                  <div class="form-row">
+                    <label>Confirmation</label>
+                    <span
+                      v-if="reconRecord.confirmation_status"
+                      :class="'recon-confirm recon-confirm--' + reconRecord.confirmation_status"
+                    >{{ reconRecord.confirmation_status }}</span>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row">
+                    <label>Grounding passed</label>
+                    <span
+                      v-if="reconRecord.grounding_passed != null"
+                      :class="'recon-confirm recon-confirm--' + (reconRecord.grounding_passed ? 'success' : 'partial')"
+                    >{{ reconRecord.grounding_passed ? 'true' : 'false' }}</span>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Grounding issues</label>
+                    <ul v-if="asList(reconRecord.grounding_issues).length" class="recon-tool-list">
+                      <li v-for="(issue, i) in asList(reconRecord.grounding_issues)" :key="'gi'+i">{{ intelEntryText(issue) || issue }}</li>
+                    </ul>
+                    <span v-else class="pretty-empty">-</span>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>Judge reasoning</label>
+                    <p class="pretty-field-text">{{ prettyScalar(reconRecord.judge_reasoning) }}</p>
+                  </div>
+                  <div class="form-row pb-field-stack">
+                    <label>UI capability response</label>
+                    <p class="pretty-field-text" style="white-space:pre-wrap;">{{ prettyScalar(reconRecord.ui_capability_response) }}</p>
+                  </div>
+                  <div class="form-row">
+                    <label>HAR path</label>
+                    <code style="word-break:break-all;">{{ prettyScalar(reconRecord.har_path) }}</code>
+                  </div>
+                  <div class="form-row">
+                    <label>Network log path</label>
+                    <code style="word-break:break-all;">{{ prettyScalar(reconRecord.network_log_path) }}</code>
+                  </div>
+                </div>
+                <p v-else class="cfg-note">
+                  No recon file yet. Run Recon to generate a profile, or paste JSON in the JSON tab and save.
+                </p>
+              </template>
+
+              <template v-else>
+                <div class="form-row pb-field-stack">
+                  <label>recon.json</label>
+                  <textarea
+                    v-model="reconJsonText"
+                    class="recon-json-editor"
+                    rows="18"
+                    spellcheck="false"
+                    placeholder='{ "product_name": "...", "capabilities": [] }'
+                    @input="reconOnJsonInput"
+                  ></textarea>
+                </div>
+              </template>
+            </div>
+          </template>
+        </template>

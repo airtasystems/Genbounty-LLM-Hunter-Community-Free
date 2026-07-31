@@ -1,0 +1,20 @@
+# Global settings (Settings → Pipeline / Cache Control / Export).
+# Not for API keys - those stay in .env.
+# Genbounty export host is hardcoded (https://genbounty.com), not stored here.
+pipeline:
+  security_assess_concurrency: 6
+  open_loop_prompts: 4
+  closed_loop_prompts: 4
+  payloads_output_dir: "payloads/generate"
+cache:
+  gemini_use_cache: false
+  openai_use_cache: true
+  openai_cache_retention: standard
+  grok_use_cache: true
+  anthropic_use_cache: true
+  anthropic_cache_ttl: 5m
+export:
+  batch_size: 25
+  delay_seconds: 2.0
+  max_retries: 6
+  retry_base_seconds: 5.0

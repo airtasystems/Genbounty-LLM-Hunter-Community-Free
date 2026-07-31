@@ -1,0 +1,943 @@
+        <!-- Clear Cache -->
+        <!-- Settings (unified: Component Config, Rubrics, Browser Config, Cache) -->
+        <template v-if="tab === 'settings'">
+          <h2>Settings</h2>
+
+          <!-- Inner sub-tab nav -->
+          <div class="settings-tabs">
+            <button :class="['settings-tab', settingsTab === 'llm'       && 'active']" @click="settingsTab = 'llm'">Configure LLMs</button>
+            <button :class="['settings-tab', settingsTab === 'pipeline'  && 'active']" @click="settingsTab = 'pipeline'">Pipeline</button>
+            <button :class="['settings-tab', settingsTab === 'component' && 'active']" @click="settingsTab = 'component'">Component Config</button>
+            <button :class="['settings-tab', settingsTab === 'browser'   && 'active']" @click="settingsTab = 'browser'">Browser Config</button>
+            <button :class="['settings-tab', settingsTab === 'defaults'  && 'active']" @click="settingsTab = 'defaults'">Shipped Defaults</button>
+            <button :class="['settings-tab', settingsTab === 'cache'     && 'active']" @click="settingsTab = 'cache'">Cache Control</button>
+            <button :class="['settings-tab', settingsTab === 'theory'    && 'active']" @click="settingsTab = 'theory'">Improvement plans</button>
+          </div>
+
+          <div v-if="settingsTab !== 'llm' && settingsTab !== 'pipeline'" class="settings-precedence">
+            <div class="settings-precedence-head">
+              <strong>Override pipeline</strong>
+              <span class="settings-precedence-sub">Highest layer wins when the same key is set at multiple levels.</span>
+            </div>
+            <ol class="settings-precedence-chain">
+              <li
+                v-for="layer in settingsPrecedence"
+                :key="layer.id"
+                :class="['settings-precedence-step', settingsTab === layer.id && 'active', layer.id === 'site' && settingsTab === 'component' && 'related', layer.id === 'browser' && settingsTab === 'cache' && 'active']"
+              >
+                <span class="settings-precedence-rank">{{ layer.rank }}</span>
+                <div>
+                  <strong>{{ layer.label }}</strong>
+                  <code class="settings-precedence-path">{{ layer.pathDisplay }}</code>
+                  <span class="settings-precedence-desc">{{ layer.description }}</span>
+                </div>
+              </li>
+            </ol>
+          </div>
+
+          <!-- Component Config -->
+          <template v-if="settingsTab === 'component'">
+            <div class="settings-section-head">
+              <span v-if="site && component" style="font-size:12px;color:var(--text-dim);">browser-bot/sites/{{ site }}/{{ component }}/config.yaml</span>
+            </div>
+            <div v-if="!site || !component" class="empty">Select a site and component first.</div>
+            <template v-else>
+
+              <div v-if="compCfgEmpty" class="discovery-prompt">
+                <div>
+                  <strong>No submission config found.</strong>
+                  Run Connect Target to configure browser UI selectors or an API endpoint.
+                </div>
+                <button class="btn btn-primary" @click="tab = 'discover'">
+                  ▶ Connect Target
+                </button>
+              </div>
+
+              <div class="cfg-section">
+                <div class="cfg-section-title">Auth</div>
+                <div class="form-row">
+                  <label>Login URL</label>
+                  <input v-model="compCfg.login_url" placeholder="https://example.com/login or http://localhost:3000" style="flex:1;max-width:none;">
+                </div>
+              </div>
+
+              <div class="cfg-section">
+                <div class="cfg-section-title">Submission</div>
+                <div class="form-row">
+                  <label>Transport</label>
+                  <select v-model="compCfg.submission.transport" style="max-width:220px;">
+                    <option value="ui">Browser UI</option>
+                    <option value="api">API endpoint</option>
+                    <option value="api_document">API upload + chat</option>
+                    <option value="api_multipart">API multipart (file + prompt)</option>
+                  </select>
+                </div>
+
+                <template v-if="compCfg.submission.transport === 'api_document'">
+                  <div class="form-row">
+                    <label>Upload URL</label>
+                    <input v-model="compCfg.submission.upload_url" placeholder="http://localhost:3000/api/documents/upload" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Upload file field</label>
+                    <input v-model="compCfg.submission.upload_file_field" placeholder="file" style="max-width:200px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Upload response path</label>
+                    <input v-model="compCfg.submission.upload_response_path" placeholder="document_id" style="max-width:200px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Chat API URL</label>
+                    <input v-model="compCfg.submission.api_url" placeholder="http://localhost:3000/api/chat" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Response path</label>
+                    <input v-model="compCfg.submission.api_response_path" placeholder="response" style="max-width:200px;">
+                  </div>
+                  <div class="form-row" style="align-items:flex-start;">
+                    <label style="padding-top:6px;">Request body</label>
+                    <textarea v-model="compCfg.submission.api_body_json" rows="4" :placeholder="PROMPT_BODY_PLACEHOLDER" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                  </div>
+                </template>
+
+                <template v-else-if="compCfg.submission.transport === 'api_multipart'">
+                  <div class="form-row">
+                    <label>API URL</label>
+                    <input v-model="compCfg.submission.api_url" placeholder="http://localhost:3000/api/chat" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Prompt field</label>
+                    <input v-model="compCfg.submission.multipart_prompt_field" placeholder="prompt" style="max-width:200px;">
+                  </div>
+                  <div class="form-row">
+                    <label>File field</label>
+                    <input v-model="compCfg.submission.multipart_file_field" placeholder="file" style="max-width:200px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Response path</label>
+                    <input v-model="compCfg.submission.api_response_path" placeholder="response" style="max-width:200px;">
+                  </div>
+                </template>
+
+                <template v-else-if="compCfg.submission.transport === 'api'">
+                  <p class="cfg-note" style="margin:0 0 12px 0;">API keys are configured in Connect Target Step 1, not in this YAML.</p>
+                  <div class="form-row">
+                    <label>Apply preset</label>
+                    <select @change="onSettingsApiPreset" style="max-width:320px;">
+                      <option value="">- choose preset -</option>
+                      <option v-for="p in llmApiPresets" :key="p.id" :value="p.id">{{ p.label }}</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label>API URL</label>
+                    <input v-model="compCfg.submission.api_url" placeholder="https://api.example.com/v1/chat" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Model</label>
+                    <input v-model="compCfg.submission.api_model" placeholder="model id" style="max-width:280px;font-family:var(--mono);font-size:12px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Method</label>
+                    <select v-model="compCfg.submission.api_method" style="max-width:160px;">
+                      <option value="POST">POST</option>
+                      <option value="GET">GET</option>
+                      <option value="PUT">PUT</option>
+                      <option value="PATCH">PATCH</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label>Response path</label>
+                    <input v-model="compCfg.submission.api_response_path" placeholder="choices.0.message.content" style="max-width:280px;font-family:var(--mono);font-size:12px;">
+                    <span class="cfg-note" style="margin:0;">Dot path; use 0 for array indices</span>
+                  </div>
+                  <div class="form-row" style="align-items:flex-start;">
+                    <label style="padding-top:6px;">Request body</label>
+                    <textarea v-model="compCfg.submission.api_body_json" rows="6" :placeholder="PROMPT_BODY_PLACEHOLDER" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                  </div>
+                  <div class="form-row">
+                    <label>Multi-turn context</label>
+                    <select v-model="compCfg.submission.api_context_mode" style="max-width:220px;">
+                      <option value="">Off (each turn stateless)</option>
+                      <option value="messages">messages (accumulate turns)</option>
+                    </select>
+                    <span class="cfg-note" style="margin:0;">Use <code v-pre>{{messages}}</code> in request body for multi_shot / iterative suites.</span>
+                  </div>
+                  <div v-if="compCfg.submission.api_context_mode === 'messages'" class="form-row" style="align-items:flex-start;">
+                    <label style="padding-top:6px;">Messages prefix</label>
+                    <textarea v-model="compCfg.submission.api_messages_prefix_json" rows="4" placeholder='[{"role":"system","content":"You are a helpful assistant."}]' style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                  </div>
+                  <div class="form-row" style="align-items:flex-start;">
+                    <label style="padding-top:6px;">Extra headers</label>
+                    <textarea v-model="compCfg.submission.api_headers_json" rows="2" placeholder='{}' style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                  </div>
+                </template>
+
+                <template v-else>
+                <div class="form-row">
+                  <label>Start URL</label>
+                  <input v-model="compCfg.submission.start_url" placeholder="https://example.com/chat" style="flex:1;max-width:none;">
+                </div>
+                <div class="form-row">
+                  <label>Submit selector</label>
+                  <input v-model="compCfg.submission.submit_selector" placeholder="button[type='submit']" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div class="form-row">
+                  <label>Response selector</label>
+                  <input v-model="compCfg.submission.response_selector" placeholder=".assistant-bubble" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div class="form-row">
+                  <label>Response within (optional)</label>
+                  <input v-model="compCfg.submission.response_within_selector" placeholder="descendant locator under roots above" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div class="form-row">
+                  <label>Response text within (optional)</label>
+                  <input v-model="compCfg.submission.response_text_within_selector" placeholder="e.g. &gt; p inside bubble for model body only" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div class="form-row">
+                  <label>Response capture mode</label>
+                  <select v-model="compCfg.submission.response_capture_mode" style="max-width:220px;">
+                    <option value="last">last (default)</option>
+                    <option value="role">role (assistant-only)</option>
+                    <option value="parity_odd">parity_odd (alternating list)</option>
+                    <option value="parity_even">parity_even (alternating list)</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label>Response list selector</label>
+                  <input v-model="compCfg.submission.response_list_selector" placeholder="flat message list for parity mode" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div class="form-row">
+                  <label>Response role selector</label>
+                  <input v-model="compCfg.submission.response_role_selector" placeholder="assistant rows for role mode" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div class="form-row">
+                  <label>Submit via</label>
+                  <select v-model="compCfg.submission.submit_via" style="max-width:160px;">
+                    <option value="click">click</option>
+                    <option value="enter">enter</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label>Response wait (ms)</label>
+                  <input type="number" v-model.number="compCfg.submission.response_wait_ms" min="500" step="500" style="max-width:160px;">
+                </div>
+
+                <div class="cfg-section-title" style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
+                  Inputs
+                  <button class="btn btn-ghost btn-sm" @click="addInput">+ Add input</button>
+                </div>
+                <div v-if="compCfg.submission.inputs.length === 0" class="empty" style="padding:8px 0;">No inputs defined.</div>
+                <div v-for="(inp, i) in compCfg.submission.inputs" :key="i" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                  <span style="color:var(--text-dim);font-size:12px;min-width:20px;">{{ i + 1 }}.</span>
+                  <input v-model="inp.selector" placeholder="CSS selector" style="flex:1;min-width:160px;font-family:var(--mono);font-size:12px;">
+                  <select v-model="inp.type" style="max-width:160px;">
+                    <option v-for="t in INPUT_TYPES" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                  <label v-if="inp.type === 'click' || inp.upload_prep || inp.surface_prep" class="checkbox-row" style="margin:0;font-size:12px;" title="Replay this click after every page reload (cookie/level/Start).">
+                    <input type="checkbox" v-model="inp.surface_prep">
+                    surface prep
+                  </label>
+                  <label v-if="inp.type === 'file'" class="checkbox-row" style="margin:0;font-size:12px;">
+                    <input type="checkbox" :checked="inp.path_from === 'payload'" @change="e => { inp.path_from = e.target.checked ? 'payload' : ''; }">
+                    path_from: payload
+                  </label>
+                  <button class="btn btn-primary btn-sm" @click="removeInput(i)">✕</button>
+                </div>
+                </template>
+              </div>
+
+              <div class="cfg-section">
+                <div class="cfg-section-title">Settings overrides</div>
+                <p class="cfg-note">This tab writes <strong>component</strong> overrides (top of the pipeline). Check <strong>Inherit</strong> to omit a key here and fall through to site → Browser Config → Shipped Defaults.</p>
+                <template v-if="settingsSchema">
+                  <div v-for="group in settingsSchema.groups" :key="group.id" class="cfg-subsection">
+                    <div class="cfg-section-title" style="font-size:13px;margin-top:12px;">{{ group.title }}</div>
+                    <div v-for="key in group.keys" :key="key" class="form-row" style="align-items:flex-start;">
+                      <label style="padding-top:6px;">{{ settingLabel(key) }}</label>
+                      <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                        <label class="checkbox-row" style="margin:0;">
+                          <input type="checkbox" v-model="compSettingsInherited[key]" @change="onCompSettingInheritChange(key)">
+                          <span>Inherit - {{ compSettingInheritHint(key) }}</span>
+                        </label>
+                        <template v-if="!compSettingsInherited[key]">
+                          <select v-if="settingMeta(key).type === 'select'" v-model="compSettings[key]" style="max-width:280px;">
+                            <option v-for="opt in settingMeta(key).options" :key="opt" :value="opt">{{ opt }}</option>
+                          </select>
+                          <label v-else-if="settingMeta(key).type === 'bool'" class="checkbox-row" style="margin:0;">
+                            <input type="checkbox" v-model="compSettings[key]">
+                            <span>{{ compSettings[key] ? 'Enabled' : 'Disabled' }}</span>
+                          </label>
+                          <div v-else-if="settingMeta(key).type === 'set'" style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <label v-for="t in settingMeta(key).options" :key="t" style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);">
+                              <input type="checkbox" :checked="compSettings[key] && compSettings[key].includes(t)" @change="toggleCompSettingSet(key, t)"> {{ t }}
+                            </label>
+                          </div>
+                          <input
+                            v-else-if="settingMeta(key).type === 'int' || settingMeta(key).type === 'float'"
+                            :type="settingMeta(key).type === 'float' ? 'number' : 'number'"
+                            v-model.number="compSettings[key]"
+                            :min="settingMeta(key).min"
+                            :max="settingMeta(key).max"
+                            :step="settingMeta(key).step || 1"
+                            style="max-width:200px;">
+                          <input v-else v-model="compSettings[key]" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="empty" style="padding:8px 0;">Loading settings schema…</div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+                <button class="btn btn-primary" @click="saveCompCfg">Save</button>
+                <span v-if="compCfgSaved" style="color:var(--green);font-size:13px;">Saved</span>
+                <span v-if="compCfgError" style="color:var(--red);font-size:13px;">{{ compCfgError }}</span>
+              </div>
+            </template>
+          </template>
+
+          <!-- Browser Config -->
+          <template v-if="settingsTab === 'browser'">
+            <div class="settings-section-head">
+              <span style="font-size:12px;color:var(--text-dim);">browser-bot/browser_bot/config.py - overrides Shipped Defaults</span>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Fetcher</div>
+              <div class="form-row">
+                <label>Fetch Method</label>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                  <select v-model="cfg.FETCH_METHOD">
+                    <option v-for="m in FETCH_METHODS" :key="m" :value="m">{{ m }}</option>
+                  </select>
+                  <span v-if="browserSettingDiffers('FETCH_METHOD')" class="setting-diff-note">Shipped default: {{ formatSettingValue(settingsSchema?.defaults?.FETCH_METHOD, 'FETCH_METHOD') }}</span>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>Pool Size</label>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                  <input type="number" v-model.number="cfg.POOL_SIZE" min="1" max="32">
+                  <span v-if="browserSettingDiffers('POOL_SIZE')" class="setting-diff-note">Shipped default: {{ formatSettingValue(settingsSchema?.defaults?.POOL_SIZE, 'POOL_SIZE') }}</span>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>Cluster Contexts</label>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                  <input type="number" v-model.number="cfg.CONTEXT_COUNT" min="1" max="32">
+                  <span v-if="browserSettingDiffers('CONTEXT_COUNT')" class="setting-diff-note">Shipped default: {{ formatSettingValue(settingsSchema?.defaults?.CONTEXT_COUNT, 'CONTEXT_COUNT') }}</span>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>Pages / Context</label>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                  <input type="number" v-model.number="cfg.PAGES_PER_CONTEXT" min="1" max="16">
+                  <span v-if="browserSettingDiffers('PAGES_PER_CONTEXT')" class="setting-diff-note">Shipped default: {{ formatSettingValue(settingsSchema?.defaults?.PAGES_PER_CONTEXT, 'PAGES_PER_CONTEXT') }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Pool / Cluster Browser Enhancements</div>
+              <div class="checkbox-row"><input type="checkbox" v-model="cfg.POOL_CLUSTER_HUMAN_LIKE"><label>Human-like (enable all below)</label></div>
+              <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_ALLOW_STYLES"><label>Allow stylesheets</label></div>
+              <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_STEALTH"><label>Playwright-stealth</label></div>
+              <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_HUMAN_CHROME"><label>Human Chrome args</label></div>
+              <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_HUMAN_CONTEXT"><label>Human context (locale / viewport / geo)</label></div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">API / Evasion</div>
+              <div class="form-row">
+                <label>API concurrency</label>
+                <input type="number" v-model.number="cfg.API_CONCURRENCY" min="1" max="32">
+              </div>
+              <div class="form-row">
+                <label>Request delay (s)</label>
+                <input type="number" v-model.number="cfg.EVASION_REQUEST_DELAY_S" min="0" step="0.1">
+              </div>
+              <div class="form-row">
+                <label>Retry wait (s)</label>
+                <input type="number" v-model.number="cfg.EVASION_RETRY_WAIT_S" min="0" step="1">
+              </div>
+              <div class="form-row">
+                <label>Max retries</label>
+                <input type="number" v-model.number="cfg.EVASION_MAX_RETRIES" min="0" max="10">
+              </div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Human Tier</div>
+              <div class="form-row">
+                <label>Country</label>
+                <select v-model="cfg.HUMAN_COUNTRY">
+                  <option v-for="c in COUNTRIES" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Read delay (ms)</label>
+                <input type="number" v-model.number="cfg.HUMAN_READ_DELAY_MS" min="0" step="100">
+              </div>
+              <div class="checkbox-row"><input type="checkbox" v-model="cfg.HUMAN_ALLOW_STYLES"><label>Allow stylesheets</label></div>
+              <div class="checkbox-row"><input type="checkbox" v-model="cfg.HUMAN_SCROLL_AFTER_LOAD"><label>Scroll after load</label></div>
+              <div class="form-row" style="align-items:flex-start">
+                <label style="padding-top:6px">User Agent</label>
+                <input v-model="cfg.HUMAN_USER_AGENT" style="max-width:100%;flex:1;font-family:var(--mono);font-size:11px;">
+              </div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Run Preview</div>
+              <div class="form-row">
+                <label style="display:inline-flex;align-items:center;gap:6px;">
+                  Screenshot interval (s)
+                  <span class="help-popover-wrap">
+                    <button
+                      type="button"
+                      class="btn-icon-help help-popover-trigger"
+                      tabindex="0"
+                      aria-label="Screenshot interval help"
+                    >?</button>
+                    <div class="help-popover" role="tooltip">
+                      Set to <strong>0</strong> to disable live browser screenshots during runs (default).
+                      Values <strong>1–120</strong> set how often frames are captured (seconds).
+                    </div>
+                  </span>
+                </label>
+                <input type="number" v-model.number="cfg.RUN_SCREENSHOT_INTERVAL_S" min="0" max="120" step="1">
+              </div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Browser</div>
+              <div class="checkbox-row">
+                <input type="checkbox" v-model="cfg.USE_CDP_BROWSER">
+                <label>Use Chrome CDP for all browser launches</label>
+              </div>
+              <p class="cfg-note" style="margin:0 0 10px 0;padding-left:28px;">
+                Launches real Chrome with a persistent profile and attaches via CDP (port 9222) for Connect Target login, component discovery, and headed Attack (human tier). Headless runs still use Playwright Chromium.
+              </p>
+              <span v-if="browserSettingDiffers('USE_CDP_BROWSER')" class="setting-diff-note" style="display:block;margin:0 0 10px 28px;">Shipped default: {{ formatSettingValue(settingsSchema?.defaults?.USE_CDP_BROWSER, 'USE_CDP_BROWSER') }}</span>
+              <div class="checkbox-row"><input type="checkbox" v-model="cfg.HEADLESS"><label>Headless</label></div>
+              <div class="form-row">
+                <label>Chrome channel</label>
+                <select v-model="cfg.CHROME_CHANNEL">
+                  <option v-for="ch in CHANNELS" :key="ch" :value="ch">{{ ch }}</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Chromium path</label>
+                <input v-model="cfg.CHROMIUM_EXECUTABLE_PATH" style="font-family:var(--mono);font-size:11px;">
+              </div>
+              <div class="form-row" style="align-items:flex-start">
+                <label style="padding-top:4px">Block types</label>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                  <label v-for="t in BLOCKED_OPTIONS" :key="t" style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);">
+                    <input type="checkbox" :checked="cfg.BLOCKED_TYPES && cfg.BLOCKED_TYPES.includes(t)" @change="toggleBlocked(t)"> {{ t }}
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+              <button class="btn btn-primary" @click="saveConfig">Save</button>
+              <span v-if="cfgSaved" style="color:var(--green);font-size:13px;">Configuration saved.</span>
+              <span v-if="cfgError" style="color:var(--red);font-size:13px;">{{ cfgError }}</span>
+            </div>
+          </template>
+
+          <!-- Configure LLMs (keys + llm.yaml profiles) -->
+          <template v-if="settingsTab === 'llm'">
+            <div class="settings-section-head">
+              <span style="font-size:12px;color:var(--text-dim);">Provider API keys (<code>.env</code>) and role profiles (<code>{{ llmConfigMeta?.path || 'llm.yaml' }}</code>)</span>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Provider API Keys</div>
+              <p class="cfg-note">
+                Keys are saved to <code>.env</code> on the server (same pattern as Genbounty Platform Credentials).
+                After save, secret values are never sent back to the browser - only whether a key is set.
+                Leaving a field blank keeps the existing key. This does not configure the target LLM being probed (Connect Target).
+              </p>
+
+              <div v-if="llmKeysLoading" class="empty">Loading key status…</div>
+              <template v-else>
+                <div v-if="llmKeys.some(k => k.has_key)" class="creds-status">
+                  <span
+                    v-for="k in llmKeys"
+                    :key="k.id"
+                    class="creds-row"
+                  >
+                    <span class="creds-label">{{ k.label }}</span>
+                    <span>{{ k.has_key ? '●●●●●●●●●●●●' : 'Not set' }}</span>
+                    <button
+                      v-if="k.has_key"
+                      type="button"
+                      class="btn btn-sm"
+                      :class="confirmButtonClass('llm-key-' + k.id, 'btn-ghost')"
+                      style="margin-left:auto;"
+                      @click="clearLlmKey(k.id)"
+                      :disabled="llmKeysSaving"
+                    >{{ confirmButtonLabel('llm-key-' + k.id, 'Remove') }}</button>
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-sm"
+                    :class="confirmButtonClass('llm-keys-all', 'btn-ghost')"
+                    style="margin-top:8px;"
+                    @click="clearAllLlmKeys"
+                    :disabled="llmKeysSaving"
+                  >{{ confirmButtonLabel('llm-keys-all', 'Remove all keys') }}</button>
+                </div>
+
+                <details :open="!llmKeys.some(k => k.has_key)" style="margin-top:10px;">
+                  <summary style="cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none;">
+                    {{ llmKeys.some(k => k.has_key) ? 'Update keys' : 'Enter keys' }}
+                  </summary>
+                  <div style="margin-top:10px;">
+                    <div
+                      v-for="k in llmKeys"
+                      :key="'edit-' + k.id"
+                      class="form-row"
+                    >
+                      <label>{{ k.label }} <code style="font-size:11px;">{{ k.env_var }}</code></label>
+                      <input
+                        v-model="llmKeysEdit[k.id]"
+                        type="password"
+                        autocomplete="off"
+                        :placeholder="k.has_key ? 'Leave blank to keep current key' : 'API key (saved to .env)'"
+                      >
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-sm"
+                        @click="saveLlmKeys"
+                        :disabled="llmKeysSaving || !llmKeysEditDirty"
+                      >
+                        {{ llmKeysSaving ? 'Saving…' : 'Save to .env' }}
+                      </button>
+                      <span v-if="llmKeysMsg" style="font-size:12px;color:var(--text-dim);">{{ llmKeysMsg }}</span>
+                      <span v-if="llmKeysError" style="font-size:12px;color:var(--red);">{{ llmKeysError }}</span>
+                    </div>
+                  </div>
+                </details>
+              </template>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Role profiles</div>
+              <p class="cfg-note">Maps each assistant role profile to a provider and model. A key must be set above (or already in <code>.env</code>) for each provider you assign. OpenRouter model ids are checked against the live OpenRouter catalog on load and on save.</p>
+              <div
+                v-if="llmConfigMeta?.openrouter_validation && !llmConfigMeta.openrouter_validation.ok"
+                style="margin:10px 0;padding:10px 12px;border:1px solid var(--red);border-radius:6px;background:rgba(220,50,50,0.08);"
+              >
+                <div style="font-size:13px;color:var(--red);font-weight:600;margin-bottom:4px;">OpenRouter model validation failed</div>
+                <div
+                  v-for="(err, i) in (llmConfigMeta.openrouter_validation.errors || [])"
+                  :key="'or-err-' + i"
+                  style="font-size:12px;color:var(--red);margin-top:2px;"
+                >{{ err }}</div>
+              </div>
+              <div
+                v-else-if="llmConfigMeta?.openrouter_validation?.warnings?.length"
+                style="margin:10px 0;padding:10px 12px;border:1px solid var(--border);border-radius:6px;"
+              >
+                <div
+                  v-for="(w, i) in llmConfigMeta.openrouter_validation.warnings"
+                  :key="'or-warn-' + i"
+                  style="font-size:12px;color:var(--text-dim);"
+                >{{ w }}</div>
+              </div>
+              <div v-if="llmConfigLoading" class="empty">Loading LLM profiles…</div>
+              <template v-else-if="llmProfileEntries.length">
+                <div v-for="entry in llmProfileEntries" :key="entry.id" class="cfg-section" style="margin-top:12px;">
+                  <div class="cfg-section-title">{{ entry.label || entry.id }}</div>
+                  <p v-if="entry.description" class="cfg-note" style="margin-top:-4px;">{{ entry.description }}</p>
+                  <div class="form-row">
+                    <label>Provider</label>
+                    <select v-model="llmProfiles[entry.id].provider" style="max-width:200px;">
+                      <option v-for="p in llmConfigMeta?.providers || []" :key="p" :value="p">{{ p }}</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label>Model</label>
+                    <input v-model="llmProfiles[entry.id].model" placeholder="e.g. gpt-5.5" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                  </div>
+                </div>
+                <div style="display:flex;gap:12px;align-items:center;margin-top:16px;">
+                  <button class="btn btn-primary" @click="saveLlmConfig" :disabled="llmConfigSaving">
+                    {{ llmConfigSaving ? 'Saving…' : 'Save profiles' }}
+                  </button>
+                  <span v-if="llmConfigSaved" style="color:var(--green);font-size:13px;">Saved</span>
+                  <span v-if="llmConfigError" style="color:var(--red);font-size:13px;">{{ llmConfigError }}</span>
+                </div>
+              </template>
+              <div v-else-if="llmConfigError" class="empty">{{ llmConfigError }}</div>
+            </div>
+          </template>
+
+          <!-- Shipped Defaults (config.defaults.yaml) -->
+          <template v-if="settingsTab === 'defaults'">
+            <div class="settings-section-head">
+              <span style="font-size:12px;color:var(--text-dim);">{{ settingsSchema?.defaults_path || 'config.defaults.yaml' }} - baseline for fresh installs</span>
+            </div>
+            <p class="cfg-note">Lowest layer in the pipeline. Browser Config and site/component YAML override these values at runtime. Site-level overrides live in <code>sites/&lt;site&gt;/config.yaml</code> (edit manually or via Component Config inherit).</p>
+            <template v-if="settingsSchema">
+              <div v-for="group in settingsSchema.groups" :key="'def-' + group.id" class="cfg-section">
+                <div class="cfg-section-title">{{ group.title }}</div>
+                <div v-for="key in group.keys" :key="'def-' + key" class="form-row" style="align-items:flex-start;">
+                  <label style="padding-top:6px;">{{ settingLabel(key) }}</label>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                    <select v-if="settingMeta(key).type === 'select'" v-model="defaultsCfg[key]" style="max-width:280px;">
+                      <option v-for="opt in settingMeta(key).options" :key="opt" :value="opt">{{ opt }}</option>
+                    </select>
+                    <label v-else-if="settingMeta(key).type === 'bool'" class="checkbox-row" style="margin:0;">
+                      <input type="checkbox" v-model="defaultsCfg[key]">
+                      <span>{{ defaultsCfg[key] ? 'Enabled' : 'Disabled' }}</span>
+                    </label>
+                    <div v-else-if="settingMeta(key).type === 'set'" style="display:flex;gap:12px;flex-wrap:wrap;">
+                      <label v-for="t in settingMeta(key).options" :key="t" style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);">
+                        <input type="checkbox" :checked="defaultsCfg[key] && defaultsCfg[key].includes(t)" @change="toggleDefaultsSettingSet(key, t)"> {{ t }}
+                      </label>
+                    </div>
+                    <input
+                      v-else-if="settingMeta(key).type === 'int' || settingMeta(key).type === 'float'"
+                      type="number"
+                      v-model.number="defaultsCfg[key]"
+                      :min="settingMeta(key).min"
+                      :max="settingMeta(key).max"
+                      :step="settingMeta(key).step || 1"
+                      style="max-width:200px;">
+                    <input v-else v-model="defaultsCfg[key]" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                    <span v-if="browserSettingDiffersFromDefaults(key)" class="setting-diff-note">Browser Config currently overrides this: {{ formatSettingValue(cfg[key], key) }}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;">
+                <button class="btn btn-primary" @click="saveDefaultsConfig">Save Shipped Defaults</button>
+                <button
+                  class="btn"
+                  :class="confirmButtonClass('factory-reset', 'btn-primary')"
+                  @click="confirmResetFactorySettings"
+                  :disabled="factoryResetting"
+                >
+                  {{ confirmButtonLabel('factory-reset', 'Reset all to factory', factoryResetting ? 'Resetting…' : '') }}
+                </button>
+                <span v-if="defaultsCfgSaved" style="color:var(--green);font-size:13px;">Saved</span>
+                <span v-if="defaultsCfgError" style="color:var(--red);font-size:13px;">{{ defaultsCfgError }}</span>
+                <span v-if="factoryResetMsg" style="color:var(--green);font-size:13px;">{{ factoryResetMsg }}</span>
+              </div>
+              <p class="cfg-note" style="margin-top:10px;">
+                <strong>Reset all to factory</strong> restores <code>{{ settingsSchema?.factory_path || 'config.factory.yaml' }}</code> into Shipped Defaults and Browser Config, clears <code>settings:</code> overrides from every site/component YAML, and resets global cache toggles in <code>pipeline_settings.yaml</code>. Submission selectors and export config are kept.
+              </p>
+            </template>
+            <div v-else class="empty" style="padding:8px 0;">Loading settings schema…</div>
+          </template>
+
+          <!-- Pipeline (generation / assessment / payloads / export) -->
+          <template v-if="settingsTab === 'pipeline'">
+            <div class="settings-section-head">
+              <span style="font-size:12px;color:var(--text-dim);">{{ pipelineSettingsMeta?.path || 'pipeline_settings.yaml' }} - generation, assessment, payloads, export batching</span>
+            </div>
+            <p class="cfg-note">Stored in <code>pipeline_settings.yaml</code> (not <code>.env</code>). API keys stay in <code>.env</code>.</p>
+            <div v-if="pipelineSettingsLoading" class="empty">Loading pipeline settings…</div>
+            <template v-else>
+              <div class="cfg-section">
+                <div class="cfg-section-title">Generation</div>
+                <div class="form-row">
+                  <label>Open-loop prompts / category</label>
+                  <input
+                    type="number"
+                    v-model.number="pipelineSettings.open_loop_prompts"
+                    :min="pipelineBounds.open_loop_prompts?.min || 1"
+                    :max="pipelineBounds.open_loop_prompts?.max || 64"
+                    style="max-width:120px;"
+                  >
+                </div>
+                <p class="cfg-note" style="margin-top:-8px;">First-run / open-loop Generate batch size per category (default 6).</p>
+                <div class="form-row">
+                  <label>Closed-loop prompts / category</label>
+                  <input
+                    type="number"
+                    v-model.number="pipelineSettings.closed_loop_prompts"
+                    :min="pipelineBounds.closed_loop_prompts?.min || 1"
+                    :max="pipelineBounds.closed_loop_prompts?.max || 64"
+                    style="max-width:120px;"
+                  >
+                </div>
+                <p class="cfg-note" style="margin-top:-8px;">Enhance / closed-loop batch size per category (default 6).</p>
+              </div>
+              <div class="cfg-section">
+                <div class="cfg-section-title">Finding assessment</div>
+                <div class="form-row">
+                  <label>Assessment concurrency</label>
+                  <input
+                    type="number"
+                    v-model.number="pipelineSettings.security_assess_concurrency"
+                    :min="pipelineBounds.security_assess_concurrency?.min || 1"
+                    :max="pipelineBounds.security_assess_concurrency?.max || 32"
+                    style="max-width:120px;"
+                  >
+                </div>
+                <p class="cfg-note" style="margin-top:-8px;">Parallel assess workers (default 4; use 1 to serialize; runtime still caps at entry count).</p>
+              </div>
+              <div class="cfg-section">
+                <div class="cfg-section-title">Payloads</div>
+                <div class="form-row">
+                  <label>Output directory</label>
+                  <input
+                    v-model="pipelineSettings.payloads_output_dir"
+                    placeholder="payloads/generate"
+                    style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"
+                  >
+                </div>
+                <p class="cfg-note" style="margin-top:-8px;">Relative to project root, or an absolute path. Default <code>payloads/generate</code>.</p>
+              </div>
+              <div class="cfg-section">
+                <div class="cfg-section-title">Export (Genbounty)</div>
+                <p class="cfg-note">Platform host is fixed at <code>https://genbounty.com</code>. Set the API key on the Export tab (<code>.env</code>).</p>
+                <div class="form-row">
+                  <label>Batch size</label>
+                  <input
+                    type="number"
+                    v-model.number="pipelineSettings.export_batch_size"
+                    :min="pipelineBounds.export_batch_size?.min || 1"
+                    :max="pipelineBounds.export_batch_size?.max || 2500"
+                    style="max-width:120px;"
+                  >
+                </div>
+                <p class="cfg-note" style="margin-top:-8px;">Results per POST (default 25).</p>
+                <div class="form-row">
+                  <label>Batch delay (seconds)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    v-model.number="pipelineSettings.export_delay_seconds"
+                    min="0"
+                    style="max-width:120px;"
+                  >
+                </div>
+                <div class="form-row">
+                  <label>Max retries</label>
+                  <input
+                    type="number"
+                    v-model.number="pipelineSettings.export_max_retries"
+                    :min="pipelineBounds.export_max_retries?.min || 1"
+                    :max="pipelineBounds.export_max_retries?.max || 20"
+                    style="max-width:120px;"
+                  >
+                </div>
+                <div class="form-row">
+                  <label>Retry base (seconds)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    v-model.number="pipelineSettings.export_retry_base_seconds"
+                    min="0"
+                    style="max-width:120px;"
+                  >
+                </div>
+                <p class="cfg-note" style="margin-top:-8px;">Exponential backoff base for 429 / rate-limit retries (default 5).</p>
+              </div>
+              <div style="display:flex;gap:12px;align-items:center;margin-top:16px;flex-wrap:wrap;">
+                <button class="btn btn-primary" @click="savePipelineSettings" :disabled="pipelineSettingsSaving">
+                  {{ pipelineSettingsSaving ? 'Saving…' : 'Save' }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" @click="resetPipelineSettingsDefaults" :disabled="pipelineSettingsSaving">
+                  Restore defaults
+                </button>
+                <span v-if="pipelineSettingsMsg" style="color:var(--green);font-size:13px;">{{ pipelineSettingsMsg }}</span>
+                <span v-if="pipelineSettingsError" style="color:var(--red);font-size:13px;">{{ pipelineSettingsError }}</span>
+              </div>
+            </template>
+          </template>
+
+          <!-- Cache Control -->
+          <template v-if="settingsTab === 'cache'">
+            <div class="settings-section-head">
+              <span style="font-size:12px;color:var(--text-dim);">pipeline_settings.yaml + component overrides - per-provider prompt cache</span>
+            </div>
+            <div class="cfg-section-title" style="font-size:13px;">Gemini</div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="useGeminiCache" v-model="cache.useGeminiCache" @change="saveCacheSettings" :disabled="cacheSettingsSaving">
+              <label for="useGeminiCache">Use Gemini context cache (global default)</label>
+            </div>
+            <p v-if="site && component" class="cfg-note" style="margin-top:-8px;">
+              Effective for <code>{{ site }}/{{ component }}</code>:
+              <strong>{{ cache.effectiveGeminiCache ? 'enabled' : 'disabled' }}</strong>
+              <span v-if="cache.componentOverride === true"> (component override: on)</span>
+              <span v-else-if="cache.componentOverride === false"> (component override: off)</span>
+              <span v-else> (inherits global)</span>
+            </p>
+
+            <div class="cfg-section-title" style="font-size:13px;margin-top:14px;">OpenAI</div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="useOpenaiCache" v-model="cache.useOpenaiCache" @change="saveCacheSettings" :disabled="cacheSettingsSaving">
+              <label for="useOpenaiCache">Send prompt-cache routing key (prompt_cache_key)</label>
+            </div>
+            <div class="form-row" style="align-items:center;">
+              <label>Cache retention</label>
+              <select v-model="cache.openaiRetention" @change="saveCacheSettings" :disabled="cacheSettingsSaving || !cache.useOpenaiCache" style="max-width:200px;">
+                <option value="standard">standard (default)</option>
+                <option value="24h">24h (extended)</option>
+              </select>
+            </div>
+            <p class="cfg-note" style="margin-top:-8px;">OpenAI caches long identical prefixes automatically; the routing key improves hit rate for repeated prompts.</p>
+
+            <div class="cfg-section-title" style="font-size:13px;margin-top:14px;">Grok (xAI)</div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="useGrokCache" v-model="cache.useGrokCache" @change="saveCacheSettings" :disabled="cacheSettingsSaving">
+              <label for="useGrokCache">Send conversation-id header (x-grok-conv-id)</label>
+            </div>
+            <p class="cfg-note" style="margin-top:-8px;">Grok caches automatically; the header improves cache-hit routing for repeated prompts.</p>
+
+            <div class="cfg-section-title" style="font-size:13px;margin-top:14px;">Anthropic</div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="useAnthropicCache" v-model="cache.useAnthropicCache" @change="saveCacheSettings" :disabled="cacheSettingsSaving">
+              <label for="useAnthropicCache">Mark system prompt as a cache breakpoint (cache_control)</label>
+            </div>
+            <div class="form-row" style="align-items:center;">
+              <label>Cache TTL</label>
+              <select v-model="cache.anthropicTtl" @change="saveCacheSettings" :disabled="cacheSettingsSaving || !cache.useAnthropicCache" style="max-width:200px;">
+                <option value="5m">5m (default)</option>
+                <option value="1h">1h (extended)</option>
+              </select>
+            </div>
+            <p class="cfg-note" style="margin-top:-8px;">Caches the shared system prompt across calls (prefix must exceed the model's minimum, ~1K tokens, to take effect).</p>
+
+            <p class="cfg-note" style="margin-top:6px;">All provider toggles are global defaults stored in <code>pipeline_settings.yaml</code>; per-component overrides live under Component Config → Cache Control.</p>
+
+            <div class="cfg-section-title" style="font-size:13px;margin-top:18px;">Corpus stores</div>
+            <p class="cfg-note">
+              Selective delete under <code>generate-tests/corpus/</code>.
+              Learned / breakthrough / history are hunt memory; curated are shipped mutate-able exemplars.
+            </p>
+            <div class="checkbox-row">
+              <input type="checkbox" id="corpusLearned" v-model="corpusStores.learned" :disabled="corpusStoresBusy">
+              <label for="corpusLearned">
+                Learned
+                <span class="cfg-note" style="margin:0;">({{ corpusStoreLabel('learned') }})</span>
+              </label>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="corpusBreakthrough" v-model="corpusStores.breakthrough" :disabled="corpusStoresBusy">
+              <label for="corpusBreakthrough">
+                Breakthrough
+                <span class="cfg-note" style="margin:0;">({{ corpusStoreLabel('breakthrough') }})</span>
+              </label>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="corpusHistory" v-model="corpusStores.history" :disabled="corpusStoresBusy">
+              <label for="corpusHistory">
+                History
+                <span class="cfg-note" style="margin:0;">({{ corpusStoreLabel('history') }})</span>
+              </label>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="corpusCurated" v-model="corpusStores.curated" :disabled="corpusStoresBusy">
+              <label for="corpusCurated">
+                Curated
+                <span class="cfg-note" style="margin:0;">({{ corpusStoreLabel('curated') }})</span>
+              </label>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 4px;">
+              <button
+                class="btn btn-sm"
+                :class="confirmButtonClass('corpus-clear', 'btn-primary')"
+                @click="clearCorpusStoresSelected"
+                :disabled="corpusStoresBusy || !corpusStoresAnySelected"
+              >{{ confirmButtonLabel('corpus-clear', 'Delete selected', corpusStoresBusy ? 'Deleting…' : '') }}</button>
+              <button class="btn btn-secondary btn-sm" @click="loadCorpusStores" :disabled="corpusStoresBusy">Refresh</button>
+            </div>
+            <p v-if="corpusStoresMsg" class="cfg-note">{{ corpusStoresMsg }}</p>
+
+            <p class="cfg-note" style="margin-top:14px;">
+              <strong>Clear All Caches</strong> also deletes project dirs named
+              <code>__pycache__</code>, <code>.pytest_cache</code>, <code>.ruff_cache</code>,
+              <code>.mypy_cache</code>, <code>.hypothesis</code>, <code>.cache</code>, and
+              <code>htmlcov</code> (skips <code>genbounty-venv</code> / <code>node_modules</code> / <code>.git</code>).
+            </p>
+            <p v-if="cacheSettingsMsg" class="cfg-note" style="margin-top:-2px;">{{ cacheSettingsMsg }}</p>
+            <div class="checkbox-row">
+              <input type="checkbox" id="delServer" v-model="cache.deleteOnServer">
+              <label for="delServer">Also delete server-side cached content when clearing</label>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="clearLocalStorage" v-model="cache.clearLocalStorage">
+              <label for="clearLocalStorage">Also clear browser localStorage (site/component, in-scope playbook, tab selections) and reload</label>
+            </div>
+            <p class="cfg-note" style="margin-top:-8px;">
+              Use when the header still shows a renamed/deleted play (e.g. <code>custom_hunt</code>).
+              Clears <code>genbounty_*</code> / legacy <code>airta_*</code> keys only - not unrelated site data.
+            </p>
+            <button class="btn btn-primary" @click="startClearCache">Clear All Caches</button>
+          </template>
+
+          <!-- Enhance Theory history -->
+          <template v-if="settingsTab === 'theory'">
+            <div class="settings-section-head">
+              <span v-if="site && component" style="font-size:12px;color:var(--text-dim);">{{ theoryHistory.path || ('browser-bot/sites/' + site + '/' + component + '/enhance_theory_history.json') }}</span>
+            </div>
+            <div v-if="!site || !component" class="empty">Select a site and component first.</div>
+            <template v-else>
+              <p class="cfg-note">
+                Accepted and rejected enhancement theories from <strong>Enhance and Run</strong> are stored here per play and strategy.
+                Clearing history resets what the next enhance loop remembers; it does not delete probe suites or run logs.
+              </p>
+              <div v-if="theoryHistoryLoading" class="empty">Loading theory history…</div>
+              <template v-else>
+                <div class="theory-history-stats">
+                  <span><strong>{{ theoryHistory.total }}</strong> entries</span>
+                  <span class="jobs-meta-sep">·</span>
+                  <span>{{ theoryHistory.accepted }} accepted</span>
+                  <span class="jobs-meta-sep">·</span>
+                  <span>{{ theoryHistory.rejected }} rejected</span>
+                </div>
+                <div class="form-row" style="flex-wrap:wrap;gap:8px;margin-top:12px;">
+                  <label style="min-width:auto;">Filter playbook</label>
+                  <input v-model="theoryHistoryFilterPlaybook" placeholder="e.g. omnichat_desktop_level_2" style="max-width:240px;font-family:var(--mono);font-size:12px;">
+                  <label style="min-width:auto;">Strategy</label>
+                  <input v-model="theoryHistoryFilterStrategy" placeholder="e.g. zero-shot" style="max-width:160px;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;">
+                  <button
+                    class="btn btn-sm"
+                    :class="confirmButtonClass('theory-filtered', 'btn-primary')"
+                    @click="clearTheoryHistoryFiltered"
+                    :disabled="theoryHistoryBusy || !theoryHistory.total"
+                  >{{ confirmButtonLabel('theory-filtered', 'Clear filtered') }}</button>
+                  <button
+                    class="btn btn-sm"
+                    :class="confirmButtonClass('theory-all', 'btn-primary')"
+                    @click="clearTheoryHistoryAll"
+                    :disabled="theoryHistoryBusy || !theoryHistory.total"
+                  >{{ confirmButtonLabel('theory-all', 'Clear all for component') }}</button>
+                  <button class="btn btn-secondary btn-sm" @click="loadTheoryHistory" :disabled="theoryHistoryBusy">Refresh</button>
+                </div>
+                <p v-if="theoryHistoryMsg" class="cfg-note">{{ theoryHistoryMsg }}</p>
+                <div v-if="!theoryHistory.entries.length" class="empty">No enhancement theory history for this component.</div>
+                <div v-else class="theory-history-list">
+                  <div v-for="entry in theoryHistory.entries" :key="entry.index + '-' + entry.timestamp" class="theory-history-card">
+                    <div class="theory-history-card-head">
+                      <span class="badge" :class="entry.status === 'accepted' ? 'badge-done' : 'badge-failed'">{{ entry.status }}</span>
+                      <code>{{ entry.playbook_id }}</code>
+                      <span class="theory-history-meta">{{ entry.strategy }}</span>
+                      <span v-if="entry.round" class="theory-history-meta">round {{ entry.round }}</span>
+                      <span class="theory-history-meta">{{ entry.timestamp }}</span>
+                      <button
+                        class="btn btn-sm"
+                        :class="confirmButtonClass('theory-entry-' + entry.index, 'btn-ghost')"
+                        style="margin-left:auto;"
+                        @click="deleteTheoryHistoryEntry(entry.index)"
+                        :disabled="theoryHistoryBusy"
+                      >{{ confirmButtonLabel('theory-entry-' + entry.index, 'Delete') }}</button>
+                    </div>
+                    <p v-if="entry.reason" class="theory-history-reason"><strong>Rejection:</strong> {{ entry.reason }}</p>
+                    <pre class="theory-history-body">{{ entry.theory }}</pre>
+                  </div>
+                </div>
+              </template>
+            </template>
+          </template>
+        </template>

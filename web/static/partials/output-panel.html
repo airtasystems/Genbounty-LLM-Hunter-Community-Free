@@ -1,0 +1,144 @@
+    <!-- Output panel -->
+    <aside
+      class="output-panel"
+      :style="{ '--output-panel-width': outputPanelWidthPx }"
+    >
+      <div
+        class="output-panel-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Experiment Output column"
+        title="Drag to widen Experiment Output"
+        tabindex="0"
+        @pointerdown.prevent="startOutputPanelResize"
+        @keydown="onOutputPanelResizeKeydown"
+      ></div>
+      <div class="output-panel-header">
+        <span>Experiment Output</span>
+        <div class="output-panel-header-actions">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm output-follow-toggle"
+            :class="{ 'output-follow-toggle--on': outputFollowTail }"
+            @click="toggleOutputFollowTail"
+            :title="outputFollowTail
+              ? 'Auto-scroll is on while you stay at the bottom. Scroll up to pause; return to the bottom (or click again) to resume.'
+              : 'Auto-scroll is off. Click to follow newest output.'"
+          >
+            {{ outputFollowTail ? 'Follow on' : 'Follow off' }}
+          </button>
+          <span v-if="panelOutputStatus.chip" :class="['output-panel-status', 'output-panel-status--' + panelOutputStatus.tone]">
+            {{ panelOutputStatus.chip }}
+          </span>
+        </div>
+      </div>
+      <div class="output-panel-body">
+        <div v-if="panelOutputStatus.detail && !discoveryUiPrompt" class="output-panel-status-detail">
+          {{ panelOutputStatus.detail }}
+        </div>
+        <div v-else-if="discoveryUiPrompt" class="output-panel-action output-panel-action--discovery">
+          <p v-if="discoveryUiModeNote()" class="discovery-ui-mode-note">{{ discoveryUiModeNote() }}</p>
+          <div class="discovery-ui-header">
+            <span v-if="discoveryUiStepBadge()" class="discovery-ui-badge">{{ discoveryUiStepBadge() }}</span>
+            <div class="output-panel-action-title">{{ discoveryUiStepHeading() }}</div>
+          </div>
+          <div class="discovery-ui-section">
+            <div class="discovery-ui-section-label">What to do</div>
+            <ol class="discovery-ui-steps">
+              <li v-for="(step, i) in discoveryUiWhatToDo()" :key="'w' + i">{{ step }}</li>
+            </ol>
+          </div>
+          <div v-if="discoveryUiSummary()" class="discovery-ui-section">
+            <div class="discovery-ui-section-label">Captured</div>
+            <pre class="discovery-ui-summary">{{ discoveryUiSummary() }}</pre>
+          </div>
+          <div class="output-panel-action-buttons">
+            <button
+              v-if="discoveryUiShowPrimary()"
+              type="button"
+              class="btn btn-primary btn-sm"
+              @click="discoveryUiPrimaryAction"
+              :disabled="discoveryUiBusy"
+            >
+              {{ discoveryUiPrimaryLabel() }}
+            </button>
+            <button
+              v-if="discoveryUiShowSecondary()"
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="discoveryUiSecondaryAction"
+              :disabled="discoveryUiBusy"
+            >
+              {{ discoveryUiSecondaryLabel() }}
+            </button>
+          </div>
+        </div>
+        <div v-else-if="loginCdpCommand && loginRunning && !effectiveLoginUseCdp" class="output-panel-action">
+          <div class="output-panel-action-title">Google sign-in - start Chrome manually</div>
+          <p class="output-panel-action-text">
+            Google blocks Playwright-launched browsers. Run this command in a separate terminal,
+            complete sign-in in that window, then click <strong>Press Enter (done)</strong>.
+          </p>
+          <pre class="discovery-ui-summary">{{ loginCdpCommand }}</pre>
+          <div class="output-panel-action-buttons">
+            <button type="button" class="btn btn-secondary btn-sm" @click="copyLoginCdpCommand">Copy command</button>
+          </div>
+        </div>
+        <div v-else-if="channelMismatchAction" class="output-panel-action">
+          <div class="output-panel-action-title">Strategy / channel mismatch</div>
+          <p class="output-panel-action-text">{{ channelMismatchAction.message }}</p>
+          <p v-if="channelMismatchAction.textCategories === 0 && channelMismatchAction.canConvert" class="output-panel-action-hint">
+            This play has no text categories yet. Converting switches delivery to <code>text_direct</code> so text strategies like iterative, zero-shot, and prompt-chaining can generate probes.
+          </p>
+          <div class="output-panel-action-buttons">
+            <button
+              v-if="channelMismatchAction.canConvert"
+              type="button"
+              class="btn btn-primary btn-sm"
+              @click="convertPlaybookToTextChannel"
+              :disabled="channelMismatchConverting"
+            >
+              {{ channelMismatchConverting ? 'Converting…' : 'Convert playbook to text-based' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="startGenerate"
+              :disabled="!site || !component || !gen.strategy || !gen.playbook"
+            >
+              Retry generate
+            </button>
+          </div>
+          <p v-if="channelMismatchMsg && !channelMismatchResolved" class="output-panel-action-msg output-panel-action-msg--err">
+            {{ channelMismatchMsg }}
+          </p>
+        </div>
+        <div v-else-if="channelMismatchResolved && channelMismatchMsg" class="output-panel-action output-panel-action--ok">
+          <div class="output-panel-action-title">Playbook updated</div>
+          <p class="output-panel-action-text">{{ channelMismatchMsg }}</p>
+          <div class="output-panel-action-buttons">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              @click="startGenerate"
+              :disabled="!site || !component || !gen.strategy || !gen.playbook"
+            >
+              Retry generate
+            </button>
+          </div>
+        </div>
+        <div
+          class="console"
+          ref="panelConsole"
+          @scroll="onOutputConsoleScroll"
+        >
+          <template v-if="panelOutputLines.length">
+            <div v-for="(line, i) in panelOutputLines" :key="i" :class="lineClass(line)">{{ line }}</div>
+          </template>
+          <div
+            v-else
+            class="console-line line-dim"
+          >{{ panelOutputStatus.placeholder || 'Idle - start a job on this tab to see live output.' }}</div>
+        </div>
+      </div>
+    </aside>

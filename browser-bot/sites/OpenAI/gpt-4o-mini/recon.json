@@ -1,0 +1,65 @@
+{
+  "probed_at": "2026-07-24T15:49:07.296523+00:00",
+  "source_mode": "connected",
+  "target_url": "https://api.openai.com/v1/chat/completions",
+  "transport": "api",
+  "host": "api.openai.com",
+  "product_name": "OpenAI API",
+  "vendor": "OpenAI",
+  "description": "A RESTful JSON API interface for interacting with OpenAI language models through text-based prompt and response exchanges.",
+  "provider": "OpenAI",
+  "model_hints": [
+    "gpt-4o-mini"
+  ],
+  "inference_type": "api",
+  "capabilities": [
+    "text-generation"
+  ],
+  "tools": [],
+  "integrations": [],
+  "api_endpoints": [],
+  "auth_mechanisms": [
+    "API key"
+  ],
+  "tech_stack": [
+    "REST API",
+    "JSON"
+  ],
+  "ui_features": [],
+  "security_observations": [
+    "The API explicitly denies code execution, file uploads, web browsing, and external service calls for this conversation."
+  ],
+  "attack_surface_notes": [
+    "The observed interface is limited to text-based prompt-response cycles.",
+    "No side-channel execution or external connectivity was detected in the capabilities probe."
+  ],
+  "evidence": [
+    {
+      "kind": "api_response",
+      "source": "capabilities",
+      "excerpt": "I cannot execute code, accept file uploads, browse the web, or call external services from this API conversation."
+    },
+    {
+      "kind": "api_response",
+      "source": "verify_tools",
+      "excerpt": "NO"
+    },
+    {
+      "kind": "config",
+      "source": "config_submission",
+      "excerpt": "\"api_model\": \"gpt-4o-mini\", \"api_method\": \"POST\", \"api_headers\": {\"Content-Type\": \"application/json\"}"
+    },
+    {
+      "kind": "config",
+      "source": "auth_summary",
+      "excerpt": "\"mode\": \"api_key\", \"has_api_key\": true, \"has_session\": false"
+    }
+  ],
+  "analyst_notes": "The API endpoint answered successfully. The probe did not capture separate network URLs, so no endpoint is listed as a discovered API endpoint beyond the required primary target URL.",
+  "confirmation_status": "partial",
+  "ui_capability_response": "",
+  "har_path": "",
+  "network_log_path": "",
+  "grounding_passed": true,
+  "judge_reasoning": "The primary API expert is high-confidence and is consistent with the raw API responses: the model provides text generation only and explicitly denies code execution, file uploads, web browsing, and external service calls. The configured target and authentication mode are retained from the raw probe context, while no unobserved tools, integrations, or endpoint discoveries are added."
+}

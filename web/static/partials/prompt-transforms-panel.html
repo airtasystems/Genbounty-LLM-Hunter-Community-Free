@@ -1,0 +1,523 @@
+            <div class="run-results-section run-results-section--transforms-compact">
+              <div class="run-results-panel">
+                <div
+                  class="findings-metrics findings-metrics--in-panel"
+                  role="group"
+                  aria-label="Prompt transforms panel"
+                >
+                  <span class="results-panel-title">Prompt Transforms</span>
+                  <span class="help-popover-wrap">
+                    <button
+                      type="button"
+                      class="btn-icon-help help-popover-trigger"
+                      tabindex="0"
+                      aria-label="Prompt transforms help"
+                    >?</button>
+                    <div class="help-popover" role="tooltip">
+                      <template v-if="tab === 'generate'">
+                        Configure transforms for generating or improving prompts, or rewrite an existing suite for the play/strategy selected above. Plain English is kept in a hidden backup so you can switch techniques, languages, native dialects, code formats, ciphers, IQ, emotion, or stylistic attributes and restore without corruption.
+                      </template>
+                      <template v-else>
+                        Pick a technique, language, dialect, frame, code, cypher, control code, IQ, or emotion to rewrite the prompt box immediately (from a Human backup). Attributes still use Apply. Restore English is on the attributes row. Fire sends the current box text.
+                      </template>
+                    </div>
+                  </span>
+                </div>
+                <div class="run-results-table-wrap gen-transforms-wrap">
+                  <div class="run-transforms-body">
+            <div class="run-transform-row run-transform-row--attrs">
+              <div class="run-attr-group">
+                <label>Temp</label>
+                <input type="range" class="run-attr-slider" min="0" max="2" step="0.1" v-model.number="runAttrTemperature" @change="persistGenAttributesPrefs">
+                <span class="run-attr-value">{{ runAttrTemperature.toFixed(1) }}</span>
+              </div>
+              <div class="run-attr-group">
+                <label>Max tok</label>
+                <input type="range" class="run-attr-slider" min="16" max="8192" step="16" v-model.number="runAttrMaxTokens" @change="persistGenAttributesPrefs">
+                <span class="run-attr-value">{{ runAttrMaxTokens }}</span>
+              </div>
+              <div class="run-attr-group">
+                <label>Top-k</label>
+                <input type="range" class="run-attr-slider" min="1" max="100" step="1" v-model.number="runAttrTopK" @change="persistGenAttributesPrefs">
+                <span class="run-attr-value">{{ runAttrTopK }}</span>
+              </div>
+              <div class="run-attr-group">
+                <label>Top-p</label>
+                <input type="range" class="run-attr-slider" min="0" max="1" step="0.05" v-model.number="runAttrTopP" @change="persistGenAttributesPrefs">
+                <span class="run-attr-value">{{ runAttrTopP.toFixed(2) }}</span>
+              </div>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="applyPromptAttributes"
+                :disabled="!canApplyPromptTransforms || runAttrApplying || runNativeRewriting || runFrameRewriting || runIqApplying || runEmotionApplying"
+              >
+                {{ runAttrApplying ? 'Applying…' : 'Apply Attributes' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <div v-if="tab === 'generate'" class="checkbox-row" style="margin:8px 0 0; flex-wrap:wrap; gap:8px; align-items:center;">
+              <input
+                type="checkbox"
+                id="genAttributesAuto"
+                v-model="runGenAttributesEnabled"
+                @change="persistGenAttributesPrefs"
+              >
+              <label for="genAttributesAuto">Apply when generating or improving prompts</label>
+              <span class="help-popover-wrap">
+                <button
+                  type="button"
+                  class="btn-icon-help help-popover-trigger"
+                  tabindex="0"
+                  aria-label="Apply when generating or improving help"
+                >?</button>
+                <div class="help-popover" role="tooltip">
+                  <p>When checked, every suite from generating or improving is rewritten after prompts are written:</p>
+                  <p>1. Checked transforms below (Technique → Emotion), stacked in that order on each prompt.</p>
+                  <p>2. These Temp / Max-tok / Top-k / Top-p attribute settings.</p>
+                  <p>Tick the checkbox on each transform row and pick a value to include it. Plain English stays in a hidden backup.</p>
+                </div>
+              </span>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                @click="restoreGenAttributesDefaults"
+                title="Reset Temp, Max-tok, Top-k, and Top-p to defaults"
+              >
+                Restore Defaults
+              </button>
+            </div>
+            <p v-if="tab === 'generate' && runGenAttributesEnabled && runGenTransformPipelinePreview" class="hint-inline run-transform-pipeline-preview">
+              Pipeline: {{ runGenTransformPipelinePreview }}
+            </p>
+            <p v-if="runAttrMsg" class="hint-inline run-transform-msg">{{ runAttrMsg }}</p>
+            <p v-if="tab === 'generate' && runTransformsHint" class="run-transforms-unavailable">{{ runTransformsHint }}</p>
+
+            <!-- Firing Range: compact auto-apply controls (no row labels / Apply buttons) -->
+            <div v-if="tab === 'manual'" class="run-transforms-compact-strip">
+              <select
+                v-model="runObfuscationTechnique"
+                :disabled="!canApplyPromptTransforms || runObfuscating || manualNativeBusy"
+                aria-label="Technique"
+                title="Technique"
+                @change="onManualTransformSelect('obfuscation')"
+              >
+                <option value="">Technique…</option>
+                <option v-for="t in obfuscationTechniques" :key="t.slug" :value="t.slug">{{ t.label }}</option>
+              </select>
+              <select
+                v-model="runTranslationLanguage"
+                :disabled="!canApplyPromptTransforms || runTranslating || manualNativeBusy"
+                aria-label="Language"
+                title="Language"
+                @change="onManualTransformSelect('translation')"
+              >
+                <option value="">Language…</option>
+                <option v-for="lang in translationLanguages" :key="lang.slug" :value="lang.slug">{{ lang.label }}</option>
+              </select>
+              <select
+                v-model="runNativeLanguage"
+                :disabled="!canApplyPromptTransforms || runNativeRewriting || manualNativeBusy"
+                aria-label="Native"
+                title="Native"
+                @change="onManualTransformSelect('native')"
+              >
+                <option value="">Native…</option>
+                <option v-for="lang in nativeLanguages" :key="lang.slug" :value="lang.slug">{{ lang.label }}</option>
+              </select>
+              <select
+                v-model="runFrameTechnique"
+                :disabled="!canApplyPromptTransforms || runFrameRewriting || manualNativeBusy"
+                aria-label="Frame"
+                title="Frame"
+                @change="onManualTransformSelect('frame')"
+              >
+                <option value="">Frame…</option>
+                <option v-for="t in frameTechniques" :key="t.slug" :value="t.slug">{{ t.label }}</option>
+              </select>
+              <select
+                v-model="runCodeLanguage"
+                :disabled="!canApplyPromptTransforms || runCodeEmbedding || manualNativeBusy"
+                aria-label="Code"
+                title="Code"
+                @change="onManualTransformSelect('code_embed')"
+              >
+                <option value="">Code…</option>
+                <option v-for="lang in codeLanguages" :key="lang.slug" :value="lang.slug">{{ lang.label }}</option>
+              </select>
+              <select
+                v-model="runCipherTechnique"
+                :disabled="!canApplyPromptTransforms || runCiphering || manualNativeBusy"
+                aria-label="Cypher"
+                title="Cypher"
+                @change="onManualTransformSelect('cipher')"
+              >
+                <option value="">Cypher…</option>
+                <option v-for="c in cipherTechniques" :key="c.slug" :value="c.slug">{{ c.label }}</option>
+              </select>
+              <select
+                v-model="runControlCodeTechnique"
+                :disabled="!canApplyPromptTransforms || runControlCoding || manualNativeBusy"
+                aria-label="Control code"
+                title="Control code"
+                @change="onManualTransformSelect('control_code')"
+              >
+                <option value="">Control code…</option>
+                <option v-for="c in controlCodes" :key="c.slug" :value="c.slug">{{ c.label }}</option>
+              </select>
+              <div class="run-transforms-compact-slider" title="IQ">
+                <span class="run-iq-value">IQ {{ runIqLevel }}</span>
+                <input
+                  type="range"
+                  class="run-iq-slider"
+                  min="10"
+                  max="300"
+                  step="1"
+                  v-model.number="runIqLevel"
+                  :disabled="!canApplyPromptTransforms || runIqApplying || manualNativeBusy"
+                  aria-label="IQ"
+                  @change="onManualTransformSelect('iq')"
+                >
+              </div>
+              <div class="run-transforms-compact-slider" :title="runEmotionLevelLabel">
+                <span class="run-iq-value">Em {{ runEmotionLevel }}</span>
+                <input
+                  type="range"
+                  class="run-iq-slider run-emotion-slider"
+                  min="0"
+                  max="300"
+                  step="1"
+                  v-model.number="runEmotionLevel"
+                  :disabled="!canApplyPromptTransforms || runEmotionApplying || manualNativeBusy"
+                  aria-label="Emotion"
+                  @change="onManualTransformSelect('emotion')"
+                >
+              </div>
+            </div>
+            <p
+              v-if="tab === 'manual' && manualTransformStatusMsg"
+              class="hint-inline run-transform-msg"
+            >{{ manualTransformStatusMsg }}</p>
+
+            <!-- Forge: labeled rows with explicit Apply -->
+            <template v-if="tab === 'generate'">
+            <div class="run-transform-row">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.obfuscation"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                Technique
+              </label>
+              <select v-model="runObfuscationTechnique" :disabled="!canApplyPromptTransforms" @change="persistGenAttributesPrefs">
+                <option value="">Select technique...</option>
+                <option v-for="t in obfuscationTechniques" :key="t.slug" :value="t.slug">{{ t.label }}</option>
+              </select>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="obfuscateAllPrompts"
+                :disabled="!canApplyPromptTransforms || !runObfuscationTechnique || runObfuscating || runNativeRewriting || runFrameRewriting || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+              >
+                {{ runObfuscating ? 'Obfuscating…' : 'Obfuscate All' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p v-if="runObfuscateMsg" class="hint-inline run-transform-msg">{{ runObfuscateMsg }}</p>
+            <div class="run-transform-row">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.translation"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                Language
+              </label>
+              <select v-model="runTranslationLanguage" :disabled="!canApplyPromptTransforms" @change="persistGenAttributesPrefs">
+                <option value="">Select language...</option>
+                <option v-for="lang in translationLanguages" :key="lang.slug" :value="lang.slug">{{ lang.label }}</option>
+              </select>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="translateAllPrompts"
+                :disabled="!canApplyPromptTransforms || !runTranslationLanguage || runTranslating || runNativeRewriting || runFrameRewriting || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+              >
+                {{ runTranslating ? 'Translating…' : 'Translate All' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p v-if="runTranslateMsg" class="hint-inline run-transform-msg">{{ runTranslateMsg }}</p>
+            <div class="run-transform-row">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.native"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                Native
+              </label>
+              <select v-model="runNativeLanguage" :disabled="!canApplyPromptTransforms" @change="persistGenAttributesPrefs">
+                <option value="">Select native...</option>
+                <option v-for="lang in nativeLanguages" :key="lang.slug" :value="lang.slug">{{ lang.label }}</option>
+              </select>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="nativeRewriteAllPrompts"
+                :disabled="!canApplyPromptTransforms || !runNativeLanguage || runNativeRewriting || runFrameRewriting || runTranslating || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+              >
+                {{ runNativeRewriting ? 'Rewriting…' : 'Apply Native' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p v-if="runNativeMsg" class="hint-inline run-transform-msg">{{ runNativeMsg }}</p>
+            <div class="run-transform-row">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.frame"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                Frame
+              </label>
+              <select v-model="runFrameTechnique" :disabled="!canApplyPromptTransforms" @change="persistGenAttributesPrefs">
+                <option value="">Select frame...</option>
+                <option v-for="t in frameTechniques" :key="t.slug" :value="t.slug">{{ t.label }}</option>
+              </select>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="frameRewriteAllPrompts"
+                :disabled="!canApplyPromptTransforms || !runFrameTechnique || runFrameRewriting || runNativeRewriting || runTranslating || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+              >
+                {{ runFrameRewriting ? 'Rewriting…' : 'Apply Frame' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p v-if="runFrameMsg" class="hint-inline run-transform-msg">{{ runFrameMsg }}</p>
+            <div class="run-transform-row">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.code_embed"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                Code
+              </label>
+              <select v-model="runCodeLanguage" :disabled="!canApplyPromptTransforms" @change="persistGenAttributesPrefs">
+                <option value="">Select code...</option>
+                <option v-for="lang in codeLanguages" :key="lang.slug" :value="lang.slug">{{ lang.label }}</option>
+              </select>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="codeEmbedAllPrompts"
+                :disabled="!canApplyPromptTransforms || !runCodeLanguage || runCodeEmbedding || runNativeRewriting || runFrameRewriting || runCiphering || runControlCoding || runIqApplying || runEmotionApplying || runAttrApplying"
+              >
+                {{ runCodeEmbedding ? 'Converting…' : 'Convert to Code' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p v-if="runCodeEmbedMsg" class="hint-inline run-transform-msg">{{ runCodeEmbedMsg }}</p>
+            <div class="run-transform-row">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.cipher"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                Cypher
+              </label>
+              <select v-model="runCipherTechnique" :disabled="!canApplyPromptTransforms" @change="persistGenAttributesPrefs">
+                <option value="">Select cypher...</option>
+                <option v-for="c in cipherTechniques" :key="c.slug" :value="c.slug">{{ c.label }}</option>
+              </select>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="cipherAllPrompts"
+                :disabled="!canApplyPromptTransforms || !runCipherTechnique || runCiphering || runControlCoding || runNativeRewriting || runFrameRewriting || runIqApplying || runEmotionApplying || runAttrApplying"
+              >
+                {{ runCiphering ? 'Ciphering…' : 'Apply Cypher' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p v-if="runCipherMsg" class="hint-inline run-transform-msg">{{ runCipherMsg }}</p>
+            <div class="run-transform-row">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.control_code"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                Control code
+              </label>
+              <select v-model="runControlCodeTechnique" :disabled="!canApplyPromptTransforms" @change="persistGenAttributesPrefs">
+                <option value="">Select control code...</option>
+                <option v-for="c in controlCodes" :key="c.slug" :value="c.slug">{{ c.label }}</option>
+              </select>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="controlCodeAllPrompts"
+                :disabled="!canApplyPromptTransforms || !runControlCodeTechnique || runControlCoding || runCodeEmbedding || runCiphering || runNativeRewriting || runFrameRewriting || runIqApplying || runEmotionApplying || runAttrApplying"
+              >
+                {{ runControlCoding ? 'Applying…' : 'Apply Control Code' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runControlCoding || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p v-if="runControlCodeMsg" class="hint-inline run-transform-msg">{{ runControlCodeMsg }}</p>
+            <div class="run-transform-row run-transform-row--iq">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.iq"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                IQ
+              </label>
+              <input
+                type="range"
+                class="run-iq-slider"
+                min="10"
+                max="300"
+                step="1"
+                v-model.number="runIqLevel"
+                :disabled="!canApplyPromptTransforms"
+                @change="persistGenAttributesPrefs"
+              >
+              <span class="run-iq-value">{{ runIqLevel }}</span>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="applyIqRewrite"
+                :disabled="!canApplyPromptTransforms || runIqApplying || runEmotionApplying || runNativeRewriting || runFrameRewriting || runAttrApplying"
+              >
+                {{ runIqApplying ? 'Applying…' : 'Apply IQ' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p v-if="runIqMsg" class="hint-inline run-transform-msg">{{ runIqMsg }}</p>
+            <div class="run-transform-row run-transform-row--emotion">
+              <label class="run-transform-apply-label" title="Include when generating or improving prompts">
+                <input
+                  type="checkbox"
+                  class="run-transform-apply"
+                  v-model="runGenTransformApply.emotion"
+                  @change="persistGenAttributesPrefs"
+                  :disabled="!runGenAttributesEnabled"
+                >
+                Emotion
+              </label>
+              <div class="run-emotion-slider-wrap">
+                <span class="run-emotion-end run-emotion-end--low">Loving</span>
+                <input
+                  type="range"
+                  class="run-iq-slider run-emotion-slider"
+                  min="0"
+                  max="300"
+                  step="1"
+                  v-model.number="runEmotionLevel"
+                  :disabled="!canApplyPromptTransforms"
+                  @change="persistGenAttributesPrefs"
+                  title="0 = loving &amp; caring · 150 = neutral · 300 = furious &amp; demanding"
+                  aria-label="Emotion from loving to angry"
+                >
+                <span class="run-emotion-end run-emotion-end--high">Angry</span>
+              </div>
+              <span class="run-iq-value" :title="runEmotionLevelLabel">{{ runEmotionLevel }}</span>
+              <button
+                class="btn btn-secondary btn-sm"
+                @click="applyEmotionRewrite"
+                :disabled="!canApplyPromptTransforms || runEmotionApplying || runIqApplying || runNativeRewriting || runFrameRewriting || runAttrApplying"
+              >
+                {{ runEmotionApplying ? 'Applying…' : 'Apply Emotion' }}
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                @click="restorePlainPrompts"
+                :disabled="!canApplyPromptTransforms || !transformsHasRestore || runObfuscating || runTranslating || runNativeRewriting || runFrameRewriting || runCodeEmbedding || runCiphering || runIqApplying || runEmotionApplying || runAttrApplying"
+                title="Restore original plain-English prompts from backup"
+              >
+                Restore English
+              </button>
+            </div>
+            <p class="hint-inline run-emotion-caption">{{ runEmotionLevelLabel }}</p>
+            <p v-if="runEmotionMsg" class="hint-inline run-transform-msg">{{ runEmotionMsg }}</p>
+            </template>
+                  </div>
+                </div>
+              </div>
+            </div>

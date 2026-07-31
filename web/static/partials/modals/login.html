@@ -1,0 +1,26 @@
+  <!-- Run login modal -->
+  <div v-if="showRunLoginModal" class="modal-backdrop" @click.self="dismissRunLoginModal">
+    <div class="modal modal-wide">
+      <div class="modal-sub">Sign-in required</div>
+      <div class="modal-help">
+        <p>Probes paused - <strong>{{ site }}</strong> is showing a login screen. Sign in to continue running probes against this target.</p>
+        <p v-if="!loginRunning">Click <strong>Sign in</strong> to open a browser window, complete sign-in, then click <strong>Save session</strong>.</p>
+        <p v-else-if="effectiveLoginUseCdp">Chrome will open for login - complete sign-in in the launched window, then click <strong>Save session</strong>.</p>
+        <p v-else>Complete sign-in in the browser window, then click <strong>Save session</strong> to store your session and resume probes.</p>
+        <p v-if="globalUseCdpBrowser" class="cfg-note" style="margin-top:10px;">{{ globalCdpBrowserMessage }}</p>
+        <label class="checkbox-row checkbox-row-tight" style="margin-top:10px;">
+          <input type="checkbox" :checked="effectiveLoginUseCdp" :disabled="loginRunning || globalUseCdpBrowser" @change="onLoginUseCdpChange">
+          <span>Open Chrome automatically for login</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="dismissRunLoginModal">Cancel</button>
+        <button type="button" class="btn btn-primary" v-if="!loginRunning" @click="confirmRunLogin">Sign in</button>
+        <button type="button" class="btn btn-primary" v-else @click="saveAuth" :disabled="authSaving">
+          {{ authSaving ? 'Saving…' : 'Save session' }}
+        </button>
+      </div>
+      <p v-if="authSaveError" class="modal-error">{{ authSaveError }}</p>
+    </div>
+  </div>
+

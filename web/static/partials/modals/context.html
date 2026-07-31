@@ -1,0 +1,114 @@
+  <!-- Site/component management modal -->
+  <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
+    <div class="modal modal-context">
+      <h2 class="modal-title">Choose where to attack</h2>
+
+      <p class="modal-hint">
+        Your last site and component are remembered in this browser (local storage) and restored on the next visit. Change them anytime from the top bar, or choose <strong>Create new…</strong> in those dropdowns to open this dialog.
+      </p>
+
+      <div class="modal-context-columns">
+      <section class="modal-section">
+        <h3 class="modal-section-title">Select target</h3>
+
+        <div class="modal-step">
+          <span class="modal-step-num" aria-hidden="true">1</span>
+          <div class="modal-field modal-field-grow">
+            <label for="modal-site-select">Site</label>
+            <select id="modal-site-select" v-model="modalSite" @change="onModalSiteChange">
+              <option value="">Choose a site…</option>
+              <option v-for="s in sites" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-step" :class="{ 'is-disabled': !modalSite }">
+          <span class="modal-step-num" aria-hidden="true">2</span>
+          <div class="modal-field modal-field-grow">
+            <label for="modal-component-select">Component</label>
+            <select
+              id="modal-component-select"
+              v-model="modalComponent"
+              @change="onModalComponentChange"
+              :disabled="!modalSite"
+            >
+              <option value="">{{ modalSite ? 'Choose a component…' : 'Select a site first' }}</option>
+              <option v-for="c in modalComponents" :key="c" :value="c">{{ c }}</option>
+            </select>
+            <p v-if="modalSite && modalComponent" class="modal-path">
+              sites/{{ modalSite }}/{{ modalComponent }}/
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="modal-section modal-section-alt">
+        <h3 class="modal-section-title">Create new</h3>
+
+        <div class="modal-field">
+          <label for="modal-new-site">New site (Enter domain or URL)</label>
+          <div class="manage-inline">
+            <input id="modal-new-site" v-model="modalNewSite" placeholder="e.g. example.com or localhost:3000" @keyup.enter="modalCreateSite">
+            <button type="button" class="btn btn-primary btn-sm" @click="modalCreateSite">Create site</button>
+          </div>
+        </div>
+
+        <div class="modal-field">
+          <label for="modal-new-component">New component</label>
+          <div class="manage-inline">
+            <input
+              id="modal-new-component"
+              v-model="modalNewComponent"
+              :disabled="!modalSite"
+              :placeholder="modalSite ? 'e.g. chat or test-target' : 'Select a site above first'"
+              @keyup.enter="modalCreateComponent"
+            >
+            <button type="button" class="btn btn-primary btn-sm" @click="modalCreateComponent" :disabled="!modalSite">Create component</button>
+          </div>
+          <p v-if="!modalSite" class="modal-field-hint">Pick or create a site before adding a component.</p>
+        </div>
+      </section>
+      </div>
+
+      <details v-if="modalSite || modalComponent" class="modal-advanced">
+        <summary>Rename or delete</summary>
+        <div class="modal-field">
+          <label>Site</label>
+          <div class="manage-inline">
+            <input v-model="modalRenameSite" :disabled="!modalSite" placeholder="Rename selected site" @keyup.enter="modalRenameSiteAction">
+            <button type="button" class="btn btn-ghost btn-sm" @click="modalRenameSiteAction" :disabled="!modalSite || !modalRenameSite || modalRenameSite === modalSite">Rename</button>
+            <button
+              type="button"
+              class="btn btn-sm"
+              :class="confirmButtonClass('modal-del-site', 'btn-primary')"
+              @click="modalDeleteSite"
+              :disabled="!modalSite"
+            >{{ confirmButtonLabel('modal-del-site', 'Delete') }}</button>
+          </div>
+        </div>
+        <div class="modal-field">
+          <label>Component</label>
+          <div class="manage-inline">
+            <input v-model="modalRenameComponent" :disabled="!modalComponent" placeholder="Rename selected component" @keyup.enter="modalRenameComponentAction">
+            <button type="button" class="btn btn-ghost btn-sm" @click="modalRenameComponentAction" :disabled="!modalComponent || !modalRenameComponent || modalRenameComponent === modalComponent">Rename</button>
+            <button
+              type="button"
+              class="btn btn-sm"
+              :class="confirmButtonClass('modal-del-comp', 'btn-primary')"
+              @click="modalDeleteComponent"
+              :disabled="!modalComponent"
+            >{{ confirmButtonLabel('modal-del-comp', 'Delete') }}</button>
+          </div>
+        </div>
+      </details>
+
+      <div v-if="modalMsg" class="modal-status">{{ modalMsg }}</div>
+      <p v-if="modalError" class="modal-error">{{ modalError }}</p>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="showModal = false">Close</button>
+        <button type="button" class="btn btn-primary" @click="confirmModal" :disabled="!modalSite || !modalComponent">Continue</button>
+      </div>
+    </div>
+  </div>
+
