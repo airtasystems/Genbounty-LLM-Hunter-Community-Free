@@ -25,13 +25,13 @@ from playwright.async_api import async_playwright
 from browser_bot.sites import (
     get_component_config_path,
     get_component_path,
-    get_login_profile_path,
     get_storage_state_path,
     load_component_config,
     load_component_config_raw,
     ensure_component_dir,
     ensure_site_config_on_discovery,
     resolve_discovery_launch_url,
+    resolve_login_profile_path,
     write_component_config_with_header,
 )
 from browser_bot.browser.launcher import launch_persistent_context
@@ -42,13 +42,18 @@ from browser_bot.config import LOGIN_USE_PERSISTENT_CONTEXT
 # Config persistence
 # ---------------------------------------------------------------------------
 
-def _should_use_login_profile(site: str) -> bool:
-    """Persistent profiles are optional because some sites crash Chromium on reuse."""
-    return LOGIN_USE_PERSISTENT_CONTEXT and get_login_profile_path(site).exists()
+def _should_use_login_profile(site: str, component: str | None = None) -> bool:
+    """Persistent profiles are optional because some sites crash Chromium on reuse.
+
+    Prefer the component login profile (where Login writes), fall back to site-level.
+    """
+    return LOGIN_USE_PERSISTENT_CONTEXT and resolve_login_profile_path(
+        site, component
+    ).exists()
 
 
-def _print_profile_disabled_notice(site: str) -> None:
-    if get_login_profile_path(site).exists() and not LOGIN_USE_PERSISTENT_CONTEXT:
+def _print_profile_disabled_notice(site: str, component: str | None = None) -> None:
+    if resolve_login_profile_path(site, component).exists() and not LOGIN_USE_PERSISTENT_CONTEXT:
         print("  Persistent login profile exists but is disabled; using saved auth state.")
 
 def _save_config_with_comments(site: str, component: str, config: dict) -> None:
@@ -2198,7 +2203,7 @@ async def _discovery_probe_response_capture(
     filter_ctx = filter_context_from_submission(submission, probe_text, site=site, component=component)
 
     try:
-        _text, response_out, _full, *_ = await run_with_ui_fallback_watch(
+        _text, response_out, _full, submit_meta = await run_with_ui_fallback_watch(
             page,
             asyncio.wait_for(
             _do_one_submit_step(
@@ -2233,6 +2238,20 @@ async def _discovery_probe_response_capture(
         raise
     except Exception as exc:
         return False, "", str(exc)
+
+    # Persist healed Send when discovery saved attach/More actions as submit.
+    if isinstance(submit_meta, dict):
+        healed = str(submit_meta.get("healed_submit_selector") or "").strip()
+        if healed and healed != "enter" and healed != submit_sel:
+            print(
+                f"  [~] Healed submit_selector after probe: {submit_sel} → {healed}"
+            )
+            submission["submit_selector"] = healed
+            if site and component:
+                try:
+                    _save_partial(site, component, submission)
+                except Exception:
+                    pass
 
     preview = (response_out or "").strip()
     if preview:
@@ -3946,8 +3965,9 @@ Rules:
 - Prefer scope from HTML landmarks when needed: section[aria-labelledby], heading ids, form boundaries, [role="region"], main, or a card/article that uniquely wraps the composer.
 - You MAY use Playwright CSS: spaces for descendants, and :has-text("visible label") on buttons/links when the label is distinctive (still scope when similar labels could exist elsewhere).
   Example pattern: section[aria-labelledby="x"] .action-row button:has-text("Send")
-- Prefer attributes (data-testid, type=submit, aria-label) when they are unique within that region.
-- NEVER use CSS-module hashed classes (pattern name--Hash). Use [class*='namePrefix'] or button[aria-label="..."] instead.
+- Prefer attributes (data-testid=\"send-button\", type=submit, aria-label Send/Send message) when unique in that region.
+- NEVER pick attach/menu chrome: More actions, +, composer-plus, upload/attach triggers, aria-haspopup=menu plus buttons.
+- NEVER use CSS-module hashed classes (pattern name--Hash). Use [class*='namePrefix'] or button[aria-label=\"...\"] instead.
 - Avoid long chains of generic divs with nth-of-type - prefer landmark + short path to the control.
 - Keep selectors short: at most a few descendant steps from the chosen landmark (or from document root if globally unique).
 """
@@ -3956,7 +3976,12 @@ Rules:
         return ""
     try:
         data = _parse_json_response(raw)
-        return sanitize_discovered_selector(data.get("submit_selector", "").strip())
+        sel = sanitize_discovered_selector(data.get("submit_selector", "").strip())
+        reject = _is_attach_menu_submit_chrome(sel)
+        if reject:
+            print(f"  [~] Rejected submit selector (attach/menu chrome): {sel} - {reject}")
+            return ""
+        return sel
     except Exception as e:
         print(f"  LLM parse error (submit): {e}")
         return ""
@@ -4072,7 +4097,11 @@ You MUST pick a selector for ONE of these element types ONLY:
 - input[type="submit"] or input[type="button"]
 - [role="button"] when it acts as the send/submit control
 
-NEVER return selectors for: textarea, text inputs, contenteditable fields, file inputs, or generic div/span containers.""",
+Prefer [data-testid="send-button"] or aria-label Send / Send message / Send prompt when present.
+
+NEVER return selectors for: textarea, text inputs, contenteditable fields, file inputs,
+generic div/span containers, or attach/menu chrome (More actions, +, composer-plus,
+upload/attach triggers, aria-haspopup=menu plus buttons).""",
     "response": """STEP: Assistant response container.
 The user clicked on or near the AI/model reply text.
 
@@ -4404,6 +4433,21 @@ def _score_context_candidate(el, target_kind: str, click_hint: dict | None) -> i
             score += 25
     if target_kind == "submit" and el_tag == "button":
         score += 5
+        if _is_attachment_menu_trigger(el) or _is_attach_menu_submit_chrome(
+            "",
+            label=el.get_text(strip=True) if hasattr(el, "get_text") else "",
+            meta={
+                "ariaLabel": el.get("aria-label") or "",
+                "dataTestId": el.get("data-testid") or "",
+                "ariaHaspopup": el.get("aria-haspopup") or "",
+                "id": el.get("id") or "",
+            },
+        ):
+            score -= 40
+        testid = (el.get("data-testid") or "").lower()
+        aria = (el.get("aria-label") or "").lower()
+        if "send" in testid or "send" in aria:
+            score += 35
     return score
 
 
@@ -4513,6 +4557,10 @@ async def _element_metadata_at_selector(page, selector: str) -> dict:
               role: (el.getAttribute('role') || '').toLowerCase(),
               contenteditable: el.getAttribute('contenteditable'),
               ariaHaspopup: (el.getAttribute('aria-haspopup') || '').toLowerCase(),
+              ariaLabel: (el.getAttribute('aria-label') || '').toLowerCase(),
+              dataTestId: (el.getAttribute('data-testid') || '').toLowerCase(),
+              id: (el.id || '').toLowerCase(),
+              innerText: ((el.innerText || el.textContent || '') + '').trim().slice(0, 80),
             })"""
         )
     except Exception:
@@ -4547,6 +4595,13 @@ async def _validate_context_selector_for_step(
         return False, f"Expected textarea or text input, got <{tag}>. Click closer to the prompt box.", None
 
     if target_kind == "submit":
+        reject = _is_attach_menu_submit_chrome(
+            selector,
+            label=str(meta.get("innerText") or meta.get("ariaLabel") or ""),
+            meta=meta,
+        )
+        if reject:
+            return False, reject, None
         if tag == "button":
             return True, "", None
         if tag == "input" and inp_type in _SUBMIT_INPUT_TYPES:
@@ -5080,6 +5135,67 @@ _ATTACHMENT_TRIGGER_KEYWORDS = (
     "add",
 )
 
+# ChatGPT / chat UIs often put attach/menu next to Send; discovery must not save those.
+_SUBMIT_ATTACH_CHROME_SEL_RE = re.compile(
+    r"composer-plus|more[\s_-]*actions|#composer-plus|"
+    r"data-testid\s*=\s*[\"'][^\"']*(attach|upload|plus|file)|"
+    r"aria-label\s*=\s*[\"'][^\"']*(attach|upload|more\s+actions)|"
+    r"aria-haspopup\s*=\s*[\"']?menu",
+    re.IGNORECASE,
+)
+_SUBMIT_ATTACH_CHROME_LABEL_RE = re.compile(
+    r"^\s*(\+|more\s+actions|attach(\s+file)?|upload(\s+file)?|"
+    r"add\s+(files?|photos?|images?|media)|open\s+.*(menu|actions))\s*$",
+    re.IGNORECASE,
+)
+_SUBMIT_SEND_SIGNAL_RE = re.compile(
+    r"send(-button)?|submit|data-testid\s*=\s*[\"']send",
+    re.IGNORECASE,
+)
+
+
+def _is_attach_menu_submit_chrome(
+    selector: str,
+    *,
+    label: str = "",
+    meta: dict | None = None,
+) -> str | None:
+    """Return reject reason when selector/label is attach/menu chrome, not Send."""
+    sel = (selector or "").strip()
+    blob_parts = [sel, label or ""]
+    if isinstance(meta, dict):
+        blob_parts.extend(
+            str(meta.get(k) or "")
+            for k in (
+                "ariaLabel",
+                "aria-label",
+                "dataTestId",
+                "data-testid",
+                "id",
+                "innerText",
+                "ariaHaspopup",
+            )
+        )
+    blob = " ".join(blob_parts).strip()
+    label_probe = " ".join(str(label or meta and meta.get("innerText") or "").split())
+    if _SUBMIT_SEND_SIGNAL_RE.search(sel) or _SUBMIT_SEND_SIGNAL_RE.search(blob):
+        # Explicit send markers win over a nearby haspopup=menu false positive.
+        if "send" in sel.lower() or "send" in blob.lower():
+            return None
+    if label_probe and _SUBMIT_ATTACH_CHROME_LABEL_RE.match(label_probe):
+        return f"attach/menu chrome {label_probe!r} - click Send, not More actions / attach"
+    if _SUBMIT_ATTACH_CHROME_SEL_RE.search(sel):
+        return "attach/menu chrome selector - click Send, not More actions / attach"
+    meta = meta or {}
+    haspopup = str(meta.get("ariaHaspopup") or meta.get("aria-haspopup") or "").lower()
+    aria = str(meta.get("ariaLabel") or meta.get("aria-label") or "").lower()
+    testid = str(meta.get("dataTestId") or meta.get("data-testid") or "").lower()
+    if haspopup == "menu" and not _SUBMIT_SEND_SIGNAL_RE.search(aria + testid + sel):
+        return "menu trigger (aria-haspopup=menu) - click Send, not the attach/plus control"
+    if any(k in aria or k in testid for k in ("attach", "upload", "more actions", "composer-plus")):
+        return f"attach/menu chrome {aria or testid!r} - click Send, not More actions / attach"
+    return None
+
 
 def _file_input_config(selector: str) -> dict:
     return {
@@ -5357,7 +5473,8 @@ def _merge_surface_pre_steps(
 
 
 _SURFACE_PREP_CHROME_LABEL_RE = re.compile(
-    r"^\s*(collapse|expand|close|cancel|back|go\s+back|menu|share|info|preview)\s*$",
+    r"^\s*(collapse|expand|close|cancel|back|go\s+back|menu|share|info|preview|"
+    r"log\s*in|sign\s*in|log\s*in\s+or\s+sign\s*up|sign\s*up|register)\s*$",
     re.IGNORECASE,
 )
 
@@ -6768,11 +6885,11 @@ async def _headless_verify_input(
         except Exception as exc:
             result["error"] = str(exc)
 
-    profile_path = get_login_profile_path(site)
-    if _should_use_login_profile(site):
+    profile_path = resolve_login_profile_path(site, component)
+    if _should_use_login_profile(site, component):
         async with async_playwright() as p:
             browser, context = await launch_persistent_context(
-                p, str(profile_path), headless=True, site=site
+                p, str(profile_path), headless=True, site=site, component=component
             )
             page = await context.new_page()
             try:
@@ -6802,6 +6919,7 @@ async def _headless_capture_with_input_filled(
     page_url: str,
     inputs: list[dict],
     storage_path: str,
+    component: str | None = None,
 ) -> str | None:
     """
     Navigate headlessly, fill all inputs with 'Hello' (do NOT submit),
@@ -6838,11 +6956,11 @@ async def _headless_capture_with_input_filled(
         await asyncio.sleep(0.5)  # let UI react (e.g. show send button)
         result["html"] = await _get_page_html(page)
 
-    profile_path = get_login_profile_path(site)
-    if _should_use_login_profile(site):
+    profile_path = resolve_login_profile_path(site, component)
+    if _should_use_login_profile(site, component):
         async with async_playwright() as p:
             browser, context = await launch_persistent_context(
-                p, str(profile_path), headless=True, site=site
+                p, str(profile_path), headless=True, site=site, component=component
             )
             page = await context.new_page()
             try:
@@ -6923,11 +7041,11 @@ async def _headless_verify_submit(
 
         result["html"] = await _get_page_html(page)
 
-    profile_path = get_login_profile_path(site)
-    if _should_use_login_profile(site):
+    profile_path = resolve_login_profile_path(site, component)
+    if _should_use_login_profile(site, component):
         async with async_playwright() as p:
             browser, context = await launch_persistent_context(
-                p, str(profile_path), headless=True, site=site
+                p, str(profile_path), headless=True, site=site, component=component
             )
             page = await context.new_page()
             try:
@@ -7137,13 +7255,13 @@ def run_manual_training(
     use_cdp: bool = False,
 ) -> bool:
     """Manual browser-guided selector discovery using LangGraph experts + judge."""
-    profile_path = get_login_profile_path(site)
-    has_profile = _should_use_login_profile(site)
+    profile_path = resolve_login_profile_path(site, component)
+    has_profile = _should_use_login_profile(site, component)
     storage_path = get_storage_state_path(site, component)
     if not has_profile and not storage_path:
         print("  No auth for this site. Run 'Add login' first.")
         return False
-    _print_profile_disabled_notice(site)
+    _print_profile_disabled_notice(site, component)
     _ensure_site_config_for_discovery(site, component)
 
     config = load_component_config(site, component)
@@ -7589,7 +7707,11 @@ def run_manual_training(
 
                     if has_profile:
                         browser, context = await launch_persistent_context(
-                            p, str(profile_path), headless=False, site=site,
+                            p,
+                            str(profile_path),
+                            headless=False,
+                            site=site,
+                            component=component,
                             always_on_top=ui_only,
                         )
                         page = await context.new_page()
@@ -7660,13 +7782,13 @@ def run_training(site: str, component: str) -> bool:
     7. LLM extracts response selector - from post-response HTML
     Config saved incrementally; edit config.yaml manually if any selector is wrong.
     """
-    profile_path = get_login_profile_path(site)
-    has_profile = _should_use_login_profile(site)
+    profile_path = resolve_login_profile_path(site, component)
+    has_profile = _should_use_login_profile(site, component)
     storage_path = get_storage_state_path(site, component)
     if not has_profile and not storage_path:
         print("  No auth for this site. Run 'Add login' first.")
         return False
-    _print_profile_disabled_notice(site)
+    _print_profile_disabled_notice(site, component)
     _ensure_site_config_for_discovery(site, component)
 
     config = load_component_config(site, component)
@@ -7737,7 +7859,7 @@ def run_training(site: str, component: str) -> bool:
 
             if has_profile:
                 browser, context = await launch_persistent_context(
-                    p, str(profile_path), headless=False, site=site
+                    p, str(profile_path), headless=False, site=site, component=component
                 )
                 page = await context.new_page()
                 try:
@@ -7908,7 +8030,9 @@ def run_training(site: str, component: str) -> bool:
     print("─" * 50)
 
     filled_html = asyncio.run(
-        _headless_capture_with_input_filled(site, page_url, confirmed_inputs, str(storage_path))
+        _headless_capture_with_input_filled(
+            site, page_url, confirmed_inputs, str(storage_path), component=component
+        )
     )
     submit_source_html = filled_html or form_html
     if filled_html:
@@ -8018,14 +8142,15 @@ def run_training(site: str, component: str) -> bool:
                 interactive=show_verify_panel,
             )
 
-        profile_path = get_login_profile_path(site)
-        if _should_use_login_profile(site):
+        profile_path = resolve_login_profile_path(site, component)
+        if _should_use_login_profile(site, component):
             async with async_playwright() as p:
                 browser, context = await launch_persistent_context(
                     p,
                     str(profile_path),
                     headless=verify_headless if verify_headless is not None else True,
                     site=site,
+                    component=component,
                 )
                 page = await context.new_page()
                 try:

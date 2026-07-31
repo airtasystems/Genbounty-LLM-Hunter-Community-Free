@@ -27,8 +27,8 @@ Result: per-component `config.yaml` (selectors or API transport). Surface pre-st
 | Mode | Storage | Notes |
 |------|---------|-------|
 | **Public** | Auth marked public | No credentials |
-| **Login** | `.login_profile/` and/or cookies in `auth.json` | Real browser login; Login/Start URLs normalize (`https://`, `.com` when TLD missing). Configure Component prefers `submission.start_url` over `login_url` / site name when opening the browser. |
-| **API key** | Secret in `.env` as `TARGET_API_KEY_<SITE>_<COMPONENT>`; metadata in `auth.json` | Header / query / bearer names only in `auth.json` - never plaintext keys there |
+| **Login** | Component `.login_profile/` (preferred) and/or cookies in `auth.json` | Real browser login writes `sites/<host>/<component>/.login_profile`. Configure / discovery resolve that path first, then fall back to a site-level profile. Login/Start URLs normalize (`https://`, `.com` when TLD missing). Configure prefers `submission.start_url` over `login_url` / site name when opening the browser. |
+| **API key** | Secret in `.env` as `TARGET_API_KEY_<SITE>_<COMPONENT>`; metadata in `auth.json` | Header / query / bearer names only in `auth.json` - never plaintext keys there. API-key-only sibling auth is not applied to browser/CDP sessions (does not clear profile cookies). |
 | **Reuse auth** | Copy from sibling component | Site fallback can also apply without copying |
 
 Clearing auth removes the matching `TARGET_API_KEY_*` from `.env` when applicable.

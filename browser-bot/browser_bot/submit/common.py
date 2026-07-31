@@ -2681,6 +2681,124 @@ async def _wait_for_submit_enabled(page, submit_selector: str, timeout_ms: int =
     return False
 
 
+_SEND_BUTTON_HEAL_SELECTORS = (
+    '[data-testid="send-button"]',
+    'button[data-testid="send-button"]',
+    'button[aria-label="Send prompt"]',
+    'button[aria-label="Send message"]',
+    'button[aria-label="Send"]',
+)
+
+
+def _looks_like_attach_submit_selector(selector: str) -> bool:
+    """True when submit_selector looks like attach/More actions chrome, not Send."""
+    sel = (selector or "").strip().lower()
+    if not sel:
+        return False
+    if "send-button" in sel or re.search(r"aria-label\s*=\s*[\"']send", sel):
+        return False
+    return bool(
+        re.search(
+            r"composer-plus|more[\s_-]*actions|attach|upload|"
+            r"aria-haspopup\s*=\s*[\"']?menu|#composer-plus",
+            sel,
+        )
+    )
+
+
+async def _prompt_still_in_composer(page: "Page", inputs: list[dict], text: str) -> bool:
+    """True when the filled probe/prompt text is still sitting in a composer field."""
+    needle = (text or "").strip()
+    if not needle:
+        return False
+    for inp in inputs_for_submission(inputs):
+        if inp.get("type", "text") not in _TEXT_TYPES:
+            continue
+        sel = (inp.get("selector") or "").strip()
+        if not sel:
+            continue
+        try:
+            loc = await _first_visible_locator(page, sel)
+            if not loc:
+                continue
+            if inp.get("type") == "contenteditable":
+                value = await loc.inner_text()
+            else:
+                try:
+                    value = await loc.input_value()
+                except Exception:
+                    value = await loc.inner_text()
+            if needle in (value or ""):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+async def _resolve_visible_send_heal_selector(page: "Page") -> str:
+    for sel in _SEND_BUTTON_HEAL_SELECTORS:
+        try:
+            loc = page.locator(sel).first
+            if await loc.count() == 0:
+                continue
+            if not await loc.is_visible():
+                continue
+            try:
+                if await loc.is_disabled():
+                    continue
+            except Exception:
+                pass
+            return sel
+        except Exception:
+            continue
+    return ""
+
+
+async def _heal_stuck_composer_send(
+    page: "Page",
+    inputs: list[dict],
+    text: str,
+) -> str:
+    """If prompt is still in the composer, click real Send or press Enter.
+
+    Returns the selector used for a heal click, ``enter`` when keyboard was used,
+    or ``\"\"`` when no heal was needed/possible.
+    """
+    if not await _prompt_still_in_composer(page, inputs, text):
+        return ""
+    heal_sel = await _resolve_visible_send_heal_selector(page)
+    if heal_sel:
+        try:
+            await page.locator(heal_sel).first.click(timeout=4000)
+            log_resilience(
+                "submit_heal",
+                "Composer still held prompt after submit - clicked real Send",
+                detail=heal_sel,
+            )
+            return heal_sel
+        except Exception:
+            pass
+    try:
+        for inp in inputs_for_submission(inputs):
+            if inp.get("type", "text") not in _TEXT_TYPES:
+                continue
+            sel = (inp.get("selector") or "").strip()
+            if not sel:
+                continue
+            loc = await _first_visible_locator(page, sel)
+            if loc:
+                await loc.click(timeout=2000)
+                break
+        await page.keyboard.press("Enter")
+        log_resilience(
+            "submit_heal",
+            "Composer still held prompt after submit - pressed Enter",
+        )
+        return "enter"
+    except Exception:
+        return ""
+
+
 async def _do_one_submit_step(
     page: "Page",
     inputs: list[dict],
@@ -2891,20 +3009,44 @@ async def _do_one_submit_step(
 
     await asyncio.sleep(0.1)
 
-    submit_loc = await _first_visible_locator(page, submit_selector)
-    if not await _wait_for_submit_enabled(page, submit_selector, timeout_ms=8000):
-        log_resilience(
-            "submit_disabled",
-            "Send/submit still disabled after fill - skipping click",
-            detail=f"prompt={text[:80]!r}",
-        )
-        from browser_bot.submit.rejection_detection import (
-            OUTCOME_SUBMIT_FAILED,
-            apply_submission_outcome,
-        )
+    effective_submit = (submit_selector or "").strip()
+    healed_submit = ""
+    already_submitted = False
+    if _looks_like_attach_submit_selector(effective_submit):
+        heal_sel = await _resolve_visible_send_heal_selector(page)
+        if heal_sel:
+            log_resilience(
+                "submit_heal",
+                "Replaced attach/menu submit_selector with real Send before click",
+                detail=f"{effective_submit} → {heal_sel}",
+            )
+            healed_submit = heal_sel
+            effective_submit = heal_sel
 
-        return text, None, "", apply_submission_outcome({}, OUTCOME_SUBMIT_FAILED)
-    if human_behavior:
+    submit_loc = await _first_visible_locator(page, effective_submit)
+    if not await _wait_for_submit_enabled(page, effective_submit, timeout_ms=8000):
+        # Wrong control (attach/plus) may stay enabled while Send is the real gate —
+        # try heal before failing closed.
+        post_fill_heal = await _heal_stuck_composer_send(page, inputs, text)
+        if post_fill_heal:
+            healed_submit = post_fill_heal
+            already_submitted = True
+            if post_fill_heal != "enter":
+                effective_submit = post_fill_heal
+                submit_loc = await _first_visible_locator(page, effective_submit)
+        else:
+            log_resilience(
+                "submit_disabled",
+                "Send/submit still disabled after fill - skipping click",
+                detail=f"prompt={text[:80]!r}",
+            )
+            from browser_bot.submit.rejection_detection import (
+                OUTCOME_SUBMIT_FAILED,
+                apply_submission_outcome,
+            )
+
+            return text, None, "", apply_submission_outcome({}, OUTCOME_SUBMIT_FAILED)
+    if human_behavior and not already_submitted:
         try:
             from browser_bot.browser.human_behavior import human_mouse_wander, human_mouse_move
             import random
@@ -2927,10 +3069,19 @@ async def _do_one_submit_step(
 
     page.on("response", on_response)
     try:
-        if submit_via == "enter":
-            await page.keyboard.press("Enter")
-        else:
-            await submit_loc.click()
+        if not already_submitted:
+            if submit_via == "enter":
+                await page.keyboard.press("Enter")
+            elif submit_loc is not None:
+                await submit_loc.click()
+
+            # Attach/menu mis-picks leave the prompt sitting in the composer — heal.
+            stuck_heal = await _heal_stuck_composer_send(page, inputs, text)
+            if stuck_heal and stuck_heal != "enter":
+                healed_submit = stuck_heal
+                effective_submit = stuck_heal
+            elif stuck_heal == "enter":
+                healed_submit = "enter"
 
         from browser_bot.submit.rejection_detection import (
             OUTCOME_CLIENT_REJECTED,
@@ -3149,6 +3300,10 @@ async def _do_one_submit_step(
         outcome,
         signals=rejection_signals if outcome == OUTCOME_CLIENT_REJECTED else None,
     )
+    if healed_submit and healed_submit != "enter":
+        submission_meta["healed_submit_selector"] = healed_submit
+    elif healed_submit == "enter":
+        submission_meta["healed_submit_via"] = "enter"
     final_text = response_text if (response_text and str(response_text).strip()) else full_content
     if (
         final_text

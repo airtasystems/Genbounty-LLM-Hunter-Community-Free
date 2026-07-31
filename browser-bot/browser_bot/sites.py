@@ -107,6 +107,20 @@ def get_login_profile_path(domain: str, component: str | None = None) -> Path:
     return _domain_to_site_dir(domain) / ".login_profile"
 
 
+def resolve_login_profile_path(domain: str, component: str | None = None) -> Path:
+    """Prefer component ``.login_profile`` when present; else site-level (legacy).
+
+    Login writes under ``sites/<host>/<component>/.login_profile``. Discovery and
+    Configure must resolve that path first so a sibling site-level miss does not
+    skip a valid component session.
+    """
+    if component:
+        component_path = get_login_profile_path(domain, component)
+        if component_path.exists():
+            return component_path
+    return get_login_profile_path(domain)
+
+
 def get_recon_path(domain: str, component: str) -> Path:
     """Path to sites/{domain}/{component}/recon.json."""
     return get_component_path(domain, component) / "recon.json"

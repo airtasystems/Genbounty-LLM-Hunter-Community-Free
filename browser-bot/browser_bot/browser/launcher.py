@@ -246,6 +246,18 @@ async def seed_auth_local_storage(context, config: dict, page=None) -> None:
             await page.close()
 
 
+def _auth_config_has_browser_session_data(config: dict) -> bool:
+    """True when auth carries cookies / origin storage (not API-key headers alone)."""
+    if config.get("cookies"):
+        return True
+    for origin in config.get("origins") or []:
+        if not isinstance(origin, dict):
+            continue
+        if origin.get("localStorage") or origin.get("sessionStorage"):
+            return True
+    return False
+
+
 async def apply_site_auth_to_context(
     context,
     site: str,
@@ -258,7 +270,12 @@ async def apply_site_auth_to_context(
     config = load_auth_config_for_site(site, component)
     if not config:
         return False
-    if replace_cookies:
+    mode = str(config.get("auth_mode") or "").strip().lower()
+    has_browser_session = _auth_config_has_browser_session_data(config)
+    # Sibling API-key auth (headers only) must never wipe a persistent login profile.
+    if mode == "api_key" and not has_browser_session:
+        return False
+    if replace_cookies and has_browser_session and config.get("cookies"):
         try:
             await context.clear_cookies()
         except Exception:

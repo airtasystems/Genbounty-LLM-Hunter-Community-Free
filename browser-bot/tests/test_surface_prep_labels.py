@@ -112,6 +112,16 @@ def test_has_text_selector_not_rejected_as_brittle():
     )
 
 
+def test_login_chrome_rejected_as_surface_prep():
+    """Logged-out discovery must not persist Log in / Sign in as surface_prep."""
+    for label in ("Log in", "Sign in", "Log in or sign up", "Sign up"):
+        reason = _is_rejected_surface_prep_selector(
+            f'button:has-text("{label}")', inner_text=label
+        )
+        assert reason, f"expected reject for {label!r}"
+        assert "chrome" in reason.lower()
+
+
 def test_generic_button_type_selector_detected():
     assert is_generic_click_selector('button[type="button"]')
     assert is_generic_click_selector("button[type=button]")
