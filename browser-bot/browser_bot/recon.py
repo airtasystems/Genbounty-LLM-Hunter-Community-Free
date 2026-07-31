@@ -280,6 +280,15 @@ def _resolve_target_url(
     return normalize_target_access_url(login or site) or _default_login_url(site)
 
 
+def headed_recon_uses_login_profile(profile_exists: bool) -> bool:
+    """True when headed recon should open the component ``.login_profile``.
+
+    HAR recording cannot use CDP; the persistent profile keeps the session and
+    still writes ``recon.har``. Without a profile, only session-cookie auth applies.
+    """
+    return bool(profile_exists)
+
+
 async def _probe_browser(
     site: str,
     component: str,
@@ -444,8 +453,9 @@ async def _probe_browser(
     async def _run_headed() -> None:
         async with async_playwright() as p:
             browser = None
-            # HAR recording cannot use CDP; prefer the login profile persistent context.
-            if profile_path.exists() and har_str:
+            # Prefer the component login profile so HAR never forces a blank Chromium.
+            # CDP cannot record HAR; persistent context keeps the session and still writes HAR.
+            if headed_recon_uses_login_profile(profile_path.exists()):
                 browser, context = await launch_persistent_context(
                     p,
                     str(profile_path),
@@ -453,6 +463,7 @@ async def _probe_browser(
                     site=site,
                     component=component,
                     record_har_path=har_str,
+                    allow_all=True,
                 )
             else:
                 browser, context = await launch_context_for_request(
@@ -461,7 +472,8 @@ async def _probe_browser(
                     headless=False,
                     allow_all=True,
                     force_human=True,
-                    record_har_path=har_str if not profile_path.exists() else None,
+                    # HAR disables CDP; without a profile only session-cookie auth applies.
+                    record_har_path=har_str,
                     site=site,
                     component=component,
                     start_url=target_url,

@@ -415,13 +415,15 @@ async def launch_persistent_context(
     component: str | None = None,
     record_har_path: str | None = None,
     always_on_top: bool = False,
+    allow_all: bool = False,
 ) -> tuple[None, "BrowserContext"]:
     """
     Launch Chrome with persistent profile for login. Google trusts real profiles more.
     Returns (None, context). Caller closes context only (no separate browser).
 
-    When site is provided, auth.json is merged into the profile (cookies, sessionStorage,
-    headers, and localStorage seeded via origin visits).
+    When site is provided, browser-session auth.json is merged into the profile (cookies,
+    sessionStorage, headers, and localStorage seeded via origin visits).
+    allow_all: skip resource blocking (full page load — recon / login-style).
     """
     from playwright.async_api import BrowserContext
 
@@ -482,10 +484,11 @@ async def launch_persistent_context(
     if site:
         await apply_site_auth_to_context(context, site, component=component)
 
-    async def route_handler(route):
-        await block_resources(route, get_blocked_types(allow_styles=HUMAN_ALLOW_STYLES))
+    if not allow_all:
+        async def route_handler(route):
+            await block_resources(route, get_blocked_types(allow_styles=HUMAN_ALLOW_STYLES))
 
-    await context.route("**/*", route_handler)
+        await context.route("**/*", route_handler)
 
     return None, context
 

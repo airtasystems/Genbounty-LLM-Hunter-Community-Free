@@ -90,3 +90,10 @@ def test_cdp_not_forced_when_headless(tmp_path, monkeypatch):
     assert not should_use_cdp_for_headed_request(
         headless=True, site=site, component=ui
     )
+
+
+def test_headed_recon_prefers_login_profile_even_with_har():
+    from browser_bot.recon import headed_recon_uses_login_profile
+
+    assert headed_recon_uses_login_profile(True)
+    assert not headed_recon_uses_login_profile(False)
