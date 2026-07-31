@@ -2315,8 +2315,11 @@ Rules:
 - Prefer semantic classes (#id, .answer, [data-testid], role markers) over layout utilities.
 - NEVER use Tailwind layout utilities alone (div.flex, div.grid, span.block) - they match chrome, not replies.
 - If the user's original pick (original_user_pick) is visible in HTML and holds reply text, prefer it over current_response_selector.
-- Use response_list_selector only for true repeating message rows (user/assistant alternating in ONE list).
-- For assistant-only lists (.answer, .bot-message), use mode last and omit list/role selectors unless HTML shows a shared list attribute.
+- Prefer response_capture_mode role with response_role_selector =
+  [data-message-author-role="assistant"] when that attribute exists — read those roots
+  directly; leave response_list_selector empty (never nest list under assistant roots).
+- Use response_list_selector only for parity_odd/parity_even alternating rows in ONE list.
+- Avoid brittle leaves like .markdown under data-turn; capture the assistant message root.
 - Do not return prompt input, submit button, or empty containers.
 """
     raw = _discovery_complete(prompt, role="grounding_judge", json_mode=True)
@@ -2352,16 +2355,20 @@ def _apply_response_capture_repair(submission: dict, repair: dict) -> list[str]:
     if list_sel and is_fragile_positional_selector(list_sel):
         list_sel = ""
 
-    if mode in ("role", "parity_odd", "parity_even") and list_sel:
+    if mode == "role":
+        root = role_sel or sel
+        submission["response_selector"] = root
+        submission["response_capture_mode"] = "role"
+        submission["response_role_selector"] = role_sel or root
+        submission.pop("response_list_selector", None)
+        lines.append("    response_capture_mode: role")
+        lines.append(f"    response_role_selector: {submission['response_role_selector']}")
+    elif mode in ("parity_odd", "parity_even") and list_sel:
         submission["response_capture_mode"] = mode
         submission["response_list_selector"] = list_sel
         lines.append(f"    response_capture_mode: {mode}")
         lines.append(f"    response_list_selector: {list_sel}")
-        if role_sel and mode == "role":
-            submission["response_role_selector"] = role_sel
-            lines.append(f"    response_role_selector: {role_sel}")
-        else:
-            submission.pop("response_role_selector", None)
+        submission.pop("response_role_selector", None)
     else:
         submission.pop("response_capture_mode", None)
         submission.pop("response_list_selector", None)
@@ -3572,10 +3579,25 @@ def _merge_response_capture_analysis(submission: dict, pick_selector: str, analy
         )
         return lines
 
+    if mode == "role":
+        # Role mode reads assistant roots directly — do not nest list_selector under them.
+        root = role_sel or pick_selector
+        submission["response_selector"] = root
+        submission["response_capture_mode"] = "role"
+        submission["response_role_selector"] = role_sel or root
+        submission.pop("response_list_selector", None)
+        lines.append("    response_capture_mode: role")
+        lines.append(f"    response_selector: {root}")
+        lines.append(f"    response_role_selector: {submission['response_role_selector']}")
+        basis = analysis.get("parity_basis")
+        if basis:
+            lines.append(f"    (capture pattern: {basis})")
+        return lines
+
     effective_root = list_sel or pick_selector
     submission["response_selector"] = effective_root
 
-    if mode in ("role", "parity_odd", "parity_even"):
+    if mode in ("parity_odd", "parity_even"):
         submission["response_capture_mode"] = mode
         lines.append(f"    response_capture_mode: {mode}")
     else:
@@ -3587,11 +3609,7 @@ def _merge_response_capture_analysis(submission: dict, pick_selector: str, analy
     else:
         submission.pop("response_list_selector", None)
 
-    if role_sel and mode == "role":
-        submission["response_role_selector"] = role_sel
-        lines.append(f"    response_role_selector: {role_sel}")
-    else:
-        submission.pop("response_role_selector", None)
+    submission.pop("response_role_selector", None)
 
     basis = analysis.get("parity_basis")
     if basis:
@@ -3640,7 +3658,17 @@ async def upgrade_response_capture_kwargs(page, submission: dict | None) -> dict
         mode = ""
         list_sel = ""
 
-    if mode in ("role", "parity_odd", "parity_even") and list_sel:
+    if mode == "role":
+        root = role_sel or sel
+        return {
+            "response_selector": root,
+            "response_capture_mode": "role",
+            # Role mode must not nest list_selector under assistant roots.
+            "response_list_selector": "",
+            "response_role_selector": role_sel or root,
+        }
+
+    if mode in ("parity_odd", "parity_even") and list_sel:
         return {
             "response_selector": sel,
             "response_capture_mode": mode,
@@ -7659,7 +7687,7 @@ def run_manual_training(
                         original_response_pick = (response_event.get("selector") or "").strip()
                         print("\n  Final step: automatic sample request to verify response capture.")
                         print("  Sit tight during the test - Continue in the panel when it finishes.")
-                        await _discovery_verify_and_repair_response_capture(
+                        verified = await _discovery_verify_and_repair_response_capture(
                             page,
                             submission,
                             original_pick=original_response_pick,
@@ -7667,7 +7695,12 @@ def run_manual_training(
                             component=component,
                         )
                         _save_partial(site, component, submission)
-                        return True
+                        if not verified:
+                            print(
+                                "  [!] Configure incomplete: response capture was not verified.",
+                                flush=True,
+                            )
+                        return bool(verified)
 
                     if launch_via_cdp:
                         from browser_bot.browser.launcher import (
@@ -8124,16 +8157,20 @@ def run_training(site: str, component: str) -> bool:
     print("\n  Final step: verifying response capture with an automatic sample request.")
     print("  If a browser window opens, Genbounty Hunter controls it - no action needed until the panel asks you to Continue.")
 
+    verified = False
+
     async def _verify_capture_headless():
+        nonlocal verified
         from pipeline.component_settings import playwright_headless_kwarg
 
         verify_headless = playwright_headless_kwarg(site=site, component=component)
         show_verify_panel = verify_headless is False
 
         async def _run(page):
+            nonlocal verified
             if show_verify_panel:
                 await _install_manual_discovery_panel(page)
-            await _discovery_verify_and_repair_response_capture(
+            verified = await _discovery_verify_and_repair_response_capture(
                 page,
                 submission,
                 original_pick=response_selector,
@@ -8167,7 +8204,7 @@ def run_training(site: str, component: str) -> bool:
                     p,
                     site,
                     _run,
-                    storage_path=str(storage_path),
+                    storage_path=str(storage_path) if storage_path else None,
                     interactive=False,
                     headless=verify_headless,
                     human_only=True,
@@ -8177,9 +8214,17 @@ def run_training(site: str, component: str) -> bool:
     try:
         asyncio.run(_verify_capture_headless())
     except Exception as exc:
-        print(f"  [!] Response capture verification skipped: {exc}")
+        print(f"  [!] Response capture verification failed: {exc}")
+        verified = False
 
     _save_partial(site, component, submission)
+
+    if not verified:
+        print("\n" + "═" * 50)
+        print("  Discovery incomplete - response capture was not verified.")
+        print("  Fix response_selector (prefer role + [data-message-author-role=\"assistant\"])")
+        print("  or re-run Configure Component.")
+        return False
 
     print("\n" + "═" * 50)
     print(f"  Discovery complete -> sites/{site}/{component}/config.yaml")

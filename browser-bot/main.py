@@ -35,10 +35,10 @@ from browser_bot.config import (
     get_pool_cluster_browser_enhancements,
 )
 from browser_bot.sites import (
+    get_browser_storage_state_path,
     get_component_urls_and_posts,
     get_domain_from_url,
     load_component_config,
-    get_storage_state_path,
     get_submission_config,
     describe_submission_config_issue,
 )
@@ -128,7 +128,7 @@ async def _setup_fetchers(
     human_only: when True, behave like FETCH_METHOD=human (no pool/cluster browsers or fetchers).
     """
     p = playwright
-    storage_state = get_storage_state_path(primary_domain, component)
+    storage_state = get_browser_storage_state_path(primary_domain, component)
     storage_state_str = str(storage_state) if storage_state else None
 
     pool_fetcher = None
@@ -280,6 +280,7 @@ async def run_with_page_from_fetchers(
     human_only: bool = False,
     component: str | None = None,
     guided_discovery: bool = False,
+    start_url: str | None = None,
 ):
     """
     Run callback(page) using first successful fetcher.
@@ -289,6 +290,7 @@ async def run_with_page_from_fetchers(
               When None (default), interactive=True → False, else uses effective component HEADLESS.
     storage_state: optional dict (overrides storage_path). Only Human supports this.
     human_only: when True, skip pool/cluster setup and fetchers (same as FETCH_METHOD=human). Use for discovery / selector recording.
+    start_url: preferred launch URL for headed CDP / login-profile sessions (e.g. Firing Range).
     Returns callback result or None if all fail.
     """
     import os
@@ -351,6 +353,8 @@ async def run_with_page_from_fetchers(
         "site": primary_domain,
         "component": resolved_component,
     }
+    if start_url:
+        human_page_kw["start_url"] = start_url
 
     result = None
     try:

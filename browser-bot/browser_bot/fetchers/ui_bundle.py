@@ -28,7 +28,7 @@ from browser_bot.config import (
 from browser_bot.fetchers.cluster import ClusterFetcher
 from browser_bot.fetchers.human import HumanFetcher
 from browser_bot.fetchers.pool import PoolFetcher
-from browser_bot.sites import get_storage_state_path
+from browser_bot.sites import get_browser_storage_state_path
 from browser_bot.submit.common import log_resilience
 
 T = TypeVar("T")
@@ -474,7 +474,7 @@ async def setup_ui_fetcher_bundle(
     """Create lazy pool/cluster tiers (shared browser) and human fetcher for UI resilience."""
     bundle = UIFetcherBundle()
     bundle._playwright = playwright
-    storage_state = get_storage_state_path(primary_domain, component)
+    storage_state = get_browser_storage_state_path(primary_domain, component)
     bundle._storage_state_str = str(storage_state) if storage_state else None
 
     method = "human" if human_only else str(FETCH_METHOD or "auto").lower()

@@ -4559,9 +4559,14 @@ async def _start_sample_request(job: Job):
         if str(bb_dir) not in sys.path:
             sys.path.insert(0, str(bb_dir))
 
-        from browser_bot.sites import describe_submission_config_issue, get_storage_state_path, get_submission_config, load_component_config
+        from browser_bot.sites import (
+            browser_ui_session_ready,
+            describe_submission_config_issue,
+            get_browser_storage_state_path,
+            get_submission_config,
+            load_component_config,
+        )
         from browser_bot.submit.api_helpers import do_api_request
-        from browser_bot.submit.common import response_capture_kwargs
         from browser_bot.submit.single import do_ui_submit_with_page
 
         sub = get_submission_config(job.site, job.component)
@@ -4585,9 +4590,13 @@ async def _start_sample_request(job: Job):
             _emit_sample_result(prompt, response_text)
             return
 
-        storage_path = get_storage_state_path(job.site, job.component)
-        if not storage_path:
-            raise RuntimeError(f"No saved auth available for {job.site}. Run Add Login first.")
+        if not browser_ui_session_ready(job.site, job.component):
+            raise RuntimeError(
+                f"No browser login/session for {job.site}/{job.component}. "
+                "Run Add Login first (sibling API keys are not a UI session)."
+            )
+        storage_path = get_browser_storage_state_path(job.site, job.component)
+        start_url = str(sub.get("start_url") or "").strip()
 
         bb_main_path = bb_dir / "main.py"
         spec = importlib.util.spec_from_file_location("browser_bot_main", bb_main_path)
@@ -4605,6 +4614,9 @@ async def _start_sample_request(job: Job):
 
             async with async_playwright() as p:
                 async def _submit(page):
+                    from browser_bot.record_submission import upgrade_response_capture_kwargs
+                    from browser_bot.submit.common import response_capture_kwargs
+
                     captured = []
 
                     def _on_response(response):
@@ -4614,9 +4626,32 @@ async def _start_sample_request(job: Job):
                     page.on("response", _on_response)
                     start = time.perf_counter()
                     try:
+                        # Same upgrade Configure verify uses (role roots, no nested list).
+                        upgraded = await upgrade_response_capture_kwargs(page, sub)
+                        if upgraded.get("response_selector"):
+                            sub["response_selector"] = upgraded["response_selector"]
+                        mode = str(upgraded.get("response_capture_mode") or "").strip().lower()
+                        if mode == "role":
+                            sub["response_capture_mode"] = "role"
+                            sub["response_role_selector"] = (
+                                upgraded.get("response_role_selector")
+                                or upgraded.get("response_selector")
+                                or sub.get("response_selector")
+                                or ""
+                            )
+                            sub.pop("response_list_selector", None)
+                        elif mode:
+                            sub["response_capture_mode"] = mode
+                            if upgraded.get("response_list_selector"):
+                                sub["response_list_selector"] = upgraded[
+                                    "response_list_selector"
+                                ]
+                        capture_kw = response_capture_kwargs(sub)
+                        if str(capture_kw.get("response_capture_mode") or "").lower() == "role":
+                            capture_kw["response_list_selector"] = ""
                         _, resp_text, _meta = await do_ui_submit_with_page(
                             page,
-                            sub["start_url"],
+                            start_url or sub["start_url"],
                             sub["inputs"],
                             sub["submit_selector"],
                             prompt,
@@ -4624,11 +4659,15 @@ async def _start_sample_request(job: Job):
                             component=job.component,
                             response_selector=sub.get("response_selector") or "",
                             response_within_selector=sub.get("response_within_selector") or "",
-                            response_text_within_selector=sub.get("response_text_within_selector") or "",
-                            **response_capture_kwargs(sub),
+                            response_text_within_selector=sub.get(
+                                "response_text_within_selector"
+                            )
+                            or "",
+                            **capture_kw,
                             submit_via=sub.get("submit_via", "click"),
                             response_wait_ms=int(sub.get("response_wait_ms", 5000) or 5000),
                             human_behavior=True,
+                            submission=sub,
                         )
                     finally:
                         try:
@@ -4656,11 +4695,12 @@ async def _start_sample_request(job: Job):
                     p,
                     job.site,
                     _submit,
-                    storage_path=str(storage_path),
+                    storage_path=str(storage_path) if storage_path else None,
                     interactive=False,
                     human_only=human_only,
                     headless=headless_override,
                     component=job.component,
+                    start_url=start_url or None,
                 )
 
         result = _aio.run(_run())

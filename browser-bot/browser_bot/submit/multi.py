@@ -14,7 +14,11 @@ from browser_bot.page_blockers import (
     check_rate_limit_before_submit,
     ensure_page_ready_for_submit,
 )
-from browser_bot.sites import get_storage_state_path, get_submission_config
+from browser_bot.sites import (
+    browser_ui_session_ready,
+    get_browser_storage_state_path,
+    get_submission_config,
+)
 
 from browser_bot.submit.common import (
     NonSuccessResponseError,
@@ -261,9 +265,9 @@ async def run_ui_submission_multi(
         return [], None
     batches = [[append_test_prompt_delimiter(t) for t in batch] for batch in batches_raw]
 
-    storage_path = get_storage_state_path(site, component)
-    if not storage_path:
+    if not browser_ui_session_ready(site, component):
         return [], None
+    storage_path = get_browser_storage_state_path(site, component)
 
     start_url = sub["start_url"]
     inputs: list[dict] = sub["inputs"]
@@ -294,7 +298,7 @@ async def run_ui_submission_multi(
 
     all_results: list[tuple[str, str | None]] = []
     all_submission_metas: list[dict[str, Any]] = []
-    storage_str = str(storage_path)
+    storage_str = str(storage_path) if storage_path else None
     page_kw = fetcher_with_page_kwargs(site, component, start_url=start_url)
 
     total_turns = sum(len(b) for b in batches)

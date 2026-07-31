@@ -335,9 +335,11 @@ Grounding rules (grounding_passed=false if violated):
 - Text prompt field: textarea or text-like input (contenteditable only if no textarea/input in HTML).
 - submit_selector: MUST be button or input[type=submit|button] - never textarea or response container.
 - response_selector: MUST be assistant message container - never prompt input or submit button.
-- When the UI shows multiple chat turns in one view, set response_list_selector to a repeating
-  bubble/row selector (same class or [data-message-author-role]) and response_capture_mode to
-  role (assistant-only), parity_odd, or parity_even - NEVER a unique nth-of-type path.
+- When the UI shows multiple chat turns in one view, set response_capture_mode to role
+  (assistant-only) with response_role_selector / response_selector =
+  [data-message-author-role="assistant"] (read those roots directly — do NOT nest a
+  response_list_selector under them), or use parity_odd / parity_even with a repeating
+  response_list_selector. NEVER a unique nth-of-type path or brittle .markdown leaf.
 - Every selector MUST match an element in the wide composer HTML fragment below.
 - Prefer step experts with confidence=high when wide experts agree; prefer wide experts when step selectors look wrong or fragile.
 - NEVER use CSS-module hashed classes; use [class*='prefix'] or stable attributes.

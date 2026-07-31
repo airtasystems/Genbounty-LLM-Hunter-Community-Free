@@ -15,7 +15,11 @@ from browser_bot.page_blockers import (
     check_rate_limit_before_submit,
     ensure_page_ready_for_submit,
 )
-from browser_bot.sites import get_storage_state_path, get_submission_config
+from browser_bot.sites import (
+    browser_ui_session_ready,
+    get_browser_storage_state_path,
+    get_submission_config,
+)
 
 from browser_bot.submit.common import (
     NonSuccessResponseError,
@@ -454,10 +458,10 @@ async def run_adaptive_submission(
         submit_selector = sub["submit_selector"]
         blockers = sub.get("blockers") if isinstance(sub.get("blockers"), list) else None
         capture = response_capture_kwargs(sub)
-        storage_path = get_storage_state_path(site, component)
-        if not storage_path:
+        if not browser_ui_session_ready(site, component):
             return [], None
-        storage_str = str(storage_path)
+        storage_path = get_browser_storage_state_path(site, component)
+        storage_str = str(storage_path) if storage_path else None
 
         if fetcher_bundle and fetcher_bundle.strategies:
             strategies = fetcher_bundle.strategies

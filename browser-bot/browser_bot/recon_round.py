@@ -106,15 +106,23 @@ async def _execute_ui_probes(
     import time
     from pathlib import Path
 
-    from browser_bot.sites import get_storage_state_path, get_submission_config
+    from browser_bot.sites import (
+        browser_ui_session_ready,
+        get_browser_storage_state_path,
+        get_submission_config,
+    )
 
     sub = get_submission_config(site, component)
     if not sub:
         raise RuntimeError(f"No submission config for {site}/{component}")
 
-    storage_path = get_storage_state_path(site, component)
-    if not storage_path:
-        raise RuntimeError(f"No saved auth for {site}. Run Add Login first.")
+    if not browser_ui_session_ready(site, component):
+        raise RuntimeError(
+            f"No browser login/session for {site}/{component}. "
+            "Run Add Login first (sibling API keys are not a UI session)."
+        )
+    storage_path = get_browser_storage_state_path(site, component)
+    start_url = str(sub.get("start_url") or "").strip()
 
     bb_dir = Path(__file__).resolve().parent.parent
     bb_main_path = bb_dir / "main.py"
@@ -134,7 +142,6 @@ async def _execute_ui_probes(
     total = len(probes)
 
     async def _run(page):
-        start_url = sub.get("start_url") or ""
         inputs = inputs_for_submission(sub.get("inputs") or [])
         await page.goto(start_url, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(0.15)
@@ -216,11 +223,12 @@ async def _execute_ui_probes(
             p,
             site,
             _run,
-            storage_path=str(storage_path),
+            storage_path=str(storage_path) if storage_path else None,
             interactive=False,
             human_only=human_only,
             headless=headless_override,
             component=component,
+            start_url=start_url or None,
         )
     return out or results
 

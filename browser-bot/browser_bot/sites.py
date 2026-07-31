@@ -175,6 +175,30 @@ def get_storage_state_path(domain: str, component: str | None = None) -> Path | 
     return resolve_auth_read_path(domain, component)
 
 
+def get_browser_storage_state_path(domain: str, component: str | None = None) -> Path | None:
+    """Auth path for UI browsers only (cookies/session) — never sibling API-key auth."""
+    from browser_bot.auth_state import resolve_browser_auth_read_path
+
+    return resolve_browser_auth_read_path(domain, component)
+
+
+def has_usable_login_profile(domain: str, component: str | None = None) -> bool:
+    """True when a component (or site) ``.login_profile`` directory exists."""
+    return resolve_login_profile_path(domain, component).exists()
+
+
+def browser_ui_session_ready(domain: str, component: str | None = None) -> bool:
+    """True when a headed/UI run can authenticate (profile, session cookies, or public)."""
+    from browser_bot.auth_state import auth_mode_for_domain
+
+    mode = auth_mode_for_domain(domain, component)
+    if mode == "none":
+        return True
+    if get_browser_storage_state_path(domain, component) is not None:
+        return True
+    return has_usable_login_profile(domain, component)
+
+
 def get_storage_state_path_for_url(url: str, component: str | None = None) -> Path | None:
     """Get storage state path for a URL's domain."""
     return get_storage_state_path(get_domain_from_url(url), component)

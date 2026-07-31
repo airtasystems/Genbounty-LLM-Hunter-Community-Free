@@ -75,6 +75,8 @@ _BANNER_SHORT_MAX_LEN = 160
 # bubble), not as the new model reply. Configure also records welcome/intro clicks into
 # response_ignore_substrings - prefer those over phrase guessing.
 _PRE_SUBMIT_CHROME_MAX_LEN = 240
+# Prefer capturing real short model answers over welcome-phrase false positives.
+_SHORT_REPLY_PREFER_CAPTURE_MAX_LEN = 96
 
 
 @dataclass
@@ -110,18 +112,51 @@ def _norm_chrome(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").strip()).lower()
 
 
+def is_auto_pre_submit_chrome_text(
+    text: str,
+    ctx: ResponseFilterContext | None = None,
+) -> bool:
+    """True for loader/redacted UI or Configure-recorded welcome — not prior answers.
+
+    Phrase-based welcome guessing is intentionally avoided so short replies like
+    ``4`` stay capturable when Fire repeats a prompt.
+    """
+    s = (text or "").strip()
+    if not s or len(s) > _PRE_SUBMIT_CHROME_MAX_LEN:
+        return False
+    if looks_like_skeleton_progress_line(s):
+        return True
+    if looks_like_welcome_or_redacted_response(s):
+        return True
+    # Only auto-register welcome when Configure already listed the exact phrase.
+    if ctx:
+        key = _norm_chrome(s)
+        return any(
+            _norm_chrome(needle) == key
+            for needle in all_ignore_substrings(ctx)
+            if needle
+        )
+    return False
+
+
 def register_pre_submit_chrome(
     ctx: ResponseFilterContext | None,
     *texts: str,
     persist: bool = True,
 ) -> None:
-    """Record short pre-submit response-surface copy so remounts are not treated as replies."""
+    """Record loader / Configure-listed welcome chrome so remounts are not replies.
+
+    Prior model answers (short strings like ``4``) are not registered — they must
+    stay capturable when Fire repeats the same prompt.
+    """
     if not ctx:
         return
     seen = {_norm_chrome(x) for x in ctx.pre_submit_chrome}
     for raw in texts:
         s = (raw or "").strip()
         if not s or len(s) > _PRE_SUBMIT_CHROME_MAX_LEN:
+            continue
+        if not is_auto_pre_submit_chrome_text(s, ctx):
             continue
         key = _norm_chrome(s)
         if not key or key in seen:
@@ -133,7 +168,6 @@ def register_pre_submit_chrome(
                 persist_response_ignore_substring,
             )
 
-            # Persist whatever was on-screen - wording is app-specific.
             persist_response_ignore_substring(ctx.site, ctx.component, s)
 
 
@@ -268,11 +302,18 @@ def looks_like_welcome_or_redacted_response(text: str) -> bool:
 
 
 def matches_custom_ignore_patterns(text: str, ctx: ResponseFilterContext) -> bool:
-    """True when short copy matches component-configured ignore substrings."""
+    """True when capture matches component-configured ignore substrings.
+
+    Short replies use exact match only so a Configure welcome phrase cannot block
+    a real answer like ``4``.
+    """
     s = (text or "").strip()
     ignores = all_ignore_substrings(ctx)
     if not s or not ignores:
         return False
+    if len(s) <= _SHORT_REPLY_PREFER_CAPTURE_MAX_LEN:
+        key = _norm_chrome(s)
+        return any(_norm_chrome(needle) == key for needle in ignores if needle)
     low = s.lower()
     if len(s) <= _CUSTOM_IGNORE_MAX_LEN:
         return any(needle.lower() in low for needle in ignores if needle)
@@ -299,18 +340,16 @@ def non_actionable_reason(text: str, ctx: ResponseFilterContext | None = None) -
         return "welcome_banner"
     if matches_pre_submit_chrome(s, ctx):
         return "pre_submit_chrome"
+    if ctx and matches_custom_ignore_patterns(s, ctx):
+        return "custom_ignore"
 
-    from browser_bot.submit.response_boilerplate import (
-        classify_response_boilerplate,
-        looks_like_stale_prompt_surface,
-        maybe_learn_response_ignore_substring,
-    )
+    # Short model answers must win over welcome-phrase / LLM-chrome heuristics.
+    # Configure-recorded ignores and pre_submit chrome (above) are enough for short UI.
+    if len(s) <= _SHORT_REPLY_PREFER_CAPTURE_MAX_LEN:
+        if ctx and _matches_submitted_prompt(s, ctx.prompt):
+            return "echoed_prompt"
+        return None
 
-    # Welcome/intro copy: prefer Configure-recorded response_ignore_substrings and
-    # pre_submit_chrome; phrase heuristics are a fallback when Configure was skipped.
-    if ctx:
-        if matches_custom_ignore_patterns(s, ctx):
-            return "custom_ignore"
     from browser_bot.submit.response_boilerplate import (
         classify_response_boilerplate,
         looks_like_assistant_welcome_copy,
@@ -330,7 +369,6 @@ def non_actionable_reason(text: str, ctx: ResponseFilterContext | None = None) -
                 s, site=ctx.site, component=ctx.component
             )
             return "stale_prompt_surface"
-        # Short unknown bubbles: ask the classifier when cheap gates fire.
         verdict = classify_response_boilerplate(
             s,
             prompt=ctx.prompt,

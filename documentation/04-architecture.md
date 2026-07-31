@@ -220,8 +220,8 @@ when a playbook is added, edited, or removed.
   - **`submit/`** - `single.py`, `multi.py`, `adaptive.py`, `api.py`, plus
     `rejection_detection.py` and `response_filters.py` / `response_boilerplate.py`
     (welcome/intro text recorded in Configure → `response_ignore_substrings`, plus
-    pre-submit response-surface chrome, so static greeting bubbles are not mistaken
-    for the model reply).
+    loader/redacted pre-submit chrome; short replies prefer capture over welcome-phrase
+    guessing so answers like `4` are not dropped).
   - **`recon*.py`** - discovery and recon graph building.
   - **`auth*.py`** - login and auth-state persistence.
   - **`page_blockers.py`** - Cloudflare/cookie and resource blocking.

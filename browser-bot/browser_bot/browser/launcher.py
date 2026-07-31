@@ -138,10 +138,13 @@ def _load_normalized_auth_config(path: Path) -> dict | None:
 
 
 def load_auth_config_for_site(site: str, component: str | None = None) -> dict | None:
-    """Load normalized auth config for a site/component, or None if missing/empty."""
-    from browser_bot.sites import get_storage_state_path
+    """Load normalized browser-session auth for a site/component, or None if missing/empty.
 
-    path = get_storage_state_path(site, component)
+    Skips sibling/own API-key-only auth — those are not browser sessions.
+    """
+    from browser_bot.sites import get_browser_storage_state_path
+
+    path = get_browser_storage_state_path(site, component)
     if not path or not path.exists():
         return None
     config = _load_normalized_auth_config(path)
@@ -286,10 +289,10 @@ async def apply_site_auth_to_context(
 
 
 def auth_config_mtime(site: str, component: str | None = None) -> float:
-    """mtime of auth.json (or legacy storage_state) for CDP session freshness checks."""
-    from browser_bot.sites import get_storage_state_path
+    """mtime of browser-session auth.json for CDP session freshness checks."""
+    from browser_bot.sites import get_browser_storage_state_path
 
-    auth_path = get_storage_state_path(site, component)
+    auth_path = get_browser_storage_state_path(site, component)
     if not auth_path or not auth_path.exists():
         return 0.0
     try:
@@ -741,7 +744,7 @@ def should_use_cdp_for_headed_request(
     site: str | None = None,
     component: str | None = None,
 ) -> bool:
-    """True for headed runs when global CDP is on or the component is Cloudflare-headed."""
+    """True for headed runs when CDP is on, a login profile exists, or Cloudflare-headed."""
     from browser_bot.config import use_cdp_browser
 
     if headless is True:
@@ -751,6 +754,14 @@ def should_use_cdp_for_headed_request(
         return False
     if use_cdp_browser():
         return True
+    if site:
+        try:
+            from browser_bot.sites import has_usable_login_profile
+
+            if has_usable_login_profile(site, component):
+                return True
+        except Exception:
+            pass
     if site and component:
         try:
             from browser_bot.sites import load_component_config
@@ -784,9 +795,9 @@ async def open_cdp_browser_session(
     Pass None to skip layout (caller applies it later).
     """
     from browser_bot.config import LOGIN_CDP_PORT
-    from browser_bot.sites import get_login_profile_path
+    from browser_bot.sites import resolve_login_profile_path
 
-    profile_path = get_login_profile_path(site, component)
+    profile_path = resolve_login_profile_path(site, component)
     profile_path.mkdir(parents=True, exist_ok=True)
     port = int(LOGIN_CDP_PORT) if isinstance(LOGIN_CDP_PORT, int) and LOGIN_CDP_PORT > 0 else 9222
     cdp_url = resolve_cdp_url()
@@ -812,7 +823,7 @@ async def open_cdp_browser_session(
                 port=port,
                 extra_args=extra_args or None,
             )
-            print(f"[{tag}] Started Chrome (CDP {cdp_url}).", flush=True)
+            print(f"[{tag}] Started Chrome (CDP {cdp_url}, profile={profile_path}).", flush=True)
         except OSError as exc:
             raise RuntimeError(f"Failed to launch Chrome: {exc}") from exc
 
@@ -876,10 +887,10 @@ async def open_guided_discovery_cdp(
         GUIDED_DISCOVERY_WINDOW_WIDTH_RATIO,
         LOGIN_CDP_PORT,
     )
-    from browser_bot.sites import get_login_profile_path
+    from browser_bot.sites import resolve_login_profile_path
 
     port = int(LOGIN_CDP_PORT) if isinstance(LOGIN_CDP_PORT, int) and LOGIN_CDP_PORT > 0 else 9222
-    profile_path = get_login_profile_path(site, component)
+    profile_path = resolve_login_profile_path(site, component)
 
     extra_args: list[str] = []
     if GUIDED_DISCOVERY_ALWAYS_ON_TOP:

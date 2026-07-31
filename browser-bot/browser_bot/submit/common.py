@@ -1807,9 +1807,8 @@ async def _resolve_response_target_locator(
     role_sel = role_selector.strip()
     root_sel = selector.strip()
 
-    if list_sel:
-        return page.locator(list_sel)
-
+    # Role mode: assistant roots are the candidates — never nest list_selector under them
+    # (Playwright only searches descendants; nested [data-message-author-role] never matches).
     if mode == "role":
         rs = role_sel or root_sel
         if not rs:
@@ -1818,6 +1817,9 @@ async def _resolve_response_target_locator(
         if inner:
             target = target.locator(inner)
         return target
+
+    if list_sel:
+        return page.locator(list_sel)
 
     if not root_sel:
         return None
@@ -1918,26 +1920,29 @@ def _response_capture_is_meaningful(
     post_submit_activity: bool = False,
 ) -> bool:
     """True when polled DOM state represents a newly arrived assistant reply."""
+    cur = (current or "").strip()
+    base_s = (base or "").strip()
     # Node remounts of the same pre-submit chrome (welcome bubble) bump the count
     # without changing text - that is not a new model reply.
     if (
         count_increased
-        and current.strip() != base.strip()
+        and cur
+        and cur != base_s
         and is_actionable_response(current, filter_ctx)
     ):
         return True
-    # Same visible text as pre-submit baseline but the bubble cycled (loader → reply) or
-    # a new identical assistant message appeared - common when sequential tests reuse
-    # session state and the model repeats the same refusal.
+    # New assistant node (or post-submit activity) with the same text as the prior
+    # reply — e.g. Fire "2+2" → "4" again after Configure left "4" on screen.
     if (
-        post_submit_activity
+        cur
+        and cur == base_s
         and is_actionable_response(current, filter_ctx)
-        and current.strip() == base.strip()
+        and (count_increased or post_submit_activity)
     ):
         return True
     return (
         bool(new_slice.strip())
-        and new_slice.strip() != base.strip()
+        and new_slice.strip() != base_s
         and is_actionable_delta(new_slice, filter_ctx)
         and is_actionable_response(current, filter_ctx)
         and not (reject_last_mode_echo and new_slice.strip() == exclude_norm)
@@ -1952,6 +1957,197 @@ def response_capture_kwargs(submission: dict | None) -> dict[str, str]:
         "response_list_selector": str(sub.get("response_list_selector") or "").strip(),
         "response_role_selector": str(sub.get("response_role_selector") or "").strip(),
     }
+
+
+_ASSISTANT_ROLE_HEAL_SELECTOR = '[data-message-author-role="assistant"]'
+_BRITTLE_RESPONSE_LEAF_RE = re.compile(
+    r"\s+(?:\.markdown|\.prose|\[class\*=['\"][^'\"]*markdown[^'\"]*['\"]\])\s*$",
+    re.IGNORECASE,
+)
+
+
+def _response_capture_heal_candidates(
+    *,
+    response_selector: str,
+    response_capture_mode: str,
+    response_list_selector: str,
+    response_role_selector: str,
+    response_within_selector: str = "",
+    response_text_within_selector: str = "",
+) -> list[dict[str, str]]:
+    """Alternate capture scopes when a nested/brittle leaf missed a visible reply."""
+    sel = (response_selector or "").strip()
+    mode = (response_capture_mode or "last").strip().lower()
+    list_sel = (response_list_selector or "").strip()
+    role_sel = (response_role_selector or "").strip()
+    within = (response_within_selector or "").strip()
+    text_within = (response_text_within_selector or "").strip()
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str, str, str]] = set()
+
+    def _add(
+        selector: str,
+        *,
+        capture_mode: str = "last",
+        list_selector: str = "",
+        role_selector: str = "",
+        within_selector: str = "",
+        text_within_selector: str = "",
+    ) -> None:
+        key = (
+            selector,
+            capture_mode,
+            list_selector,
+            role_selector,
+            within_selector,
+            text_within_selector,
+        )
+        if not selector or key in seen:
+            return
+        # Skip the exact failing configuration.
+        if (
+            selector == sel
+            and capture_mode == mode
+            and list_selector == list_sel
+            and role_selector == role_sel
+            and within_selector == within
+            and text_within_selector == text_within
+        ):
+            return
+        seen.add(key)
+        out.append(
+            {
+                "response_selector": selector,
+                "response_capture_mode": capture_mode,
+                "response_list_selector": list_selector,
+                "response_role_selector": role_selector,
+                "response_within_selector": within_selector,
+                "response_text_within_selector": text_within_selector,
+            }
+        )
+
+    # Role roots directly (fixes nested list_selector under assistant).
+    _add(
+        role_sel or _ASSISTANT_ROLE_HEAL_SELECTOR,
+        capture_mode="role",
+        role_selector=role_sel or _ASSISTANT_ROLE_HEAL_SELECTOR,
+    )
+    _add(
+        _ASSISTANT_ROLE_HEAL_SELECTOR,
+        capture_mode="role",
+        role_selector=_ASSISTANT_ROLE_HEAL_SELECTOR,
+    )
+    # Drop brittle markdown/prose leaf under data-turn / role roots.
+    stripped = _BRITTLE_RESPONSE_LEAF_RE.sub("", sel).strip()
+    if stripped and stripped != sel:
+        _add(stripped, capture_mode="last")
+        _add(
+            stripped,
+            capture_mode="role",
+            role_selector=stripped if "assistant" in stripped else _ASSISTANT_ROLE_HEAL_SELECTOR,
+        )
+    if " " in sel:
+        parent = sel.rsplit(" ", 1)[0].strip()
+        if parent:
+            _add(parent, capture_mode="last")
+    return out
+
+
+async def _try_response_capture_heal(
+    page: "Page",
+    *,
+    response_selector: str,
+    response_capture_mode: str,
+    response_list_selector: str,
+    response_role_selector: str,
+    response_within_selector: str = "",
+    response_text_within_selector: str = "",
+    filter_ctx: ResponseFilterContext | None = None,
+    exclude_text: str = "",
+    submission: dict | None = None,
+    site: str = "",
+    component: str = "",
+) -> tuple[str, dict[str, str]]:
+    """If a visible reply exists under a healed scope, return (text, healed_fields)."""
+    candidates = _response_capture_heal_candidates(
+        response_selector=response_selector,
+        response_capture_mode=response_capture_mode,
+        response_list_selector=response_list_selector,
+        response_role_selector=response_role_selector,
+        response_within_selector=response_within_selector,
+        response_text_within_selector=response_text_within_selector,
+    )
+    exclude_norm = normalize_dom_text(exclude_text or "").strip()
+    for cand in candidates:
+        try:
+            text = await _response_selector_text(
+                page,
+                cand["response_selector"],
+                within_selector=cand.get("response_within_selector") or "",
+                text_within_selector=cand.get("response_text_within_selector") or "",
+                capture_mode=cand.get("response_capture_mode") or "last",
+                list_selector=cand.get("response_list_selector") or "",
+                role_selector=cand.get("response_role_selector") or "",
+            )
+        except Exception:
+            continue
+        text = (text or "").strip()
+        if not text or text == exclude_norm:
+            continue
+        if not is_actionable_response(text, filter_ctx):
+            continue
+        log_resilience(
+            "response_heal",
+            "Healed response capture after leaf/list miss",
+            detail=(
+                f"{response_selector!r} → {cand['response_selector']!r} "
+                f"(mode={cand.get('response_capture_mode') or 'last'})"
+            ),
+        )
+        if submission is not None:
+            submission["response_selector"] = cand["response_selector"]
+            mode = (cand.get("response_capture_mode") or "last").strip().lower()
+            if mode == "role":
+                submission["response_capture_mode"] = "role"
+                submission["response_role_selector"] = (
+                    cand.get("response_role_selector") or cand["response_selector"]
+                )
+                submission.pop("response_list_selector", None)
+            else:
+                submission.pop("response_capture_mode", None)
+                submission.pop("response_list_selector", None)
+                submission.pop("response_role_selector", None)
+            submission.pop("response_within_selector", None)
+            submission.pop("response_text_within_selector", None)
+            if site and component:
+                try:
+                    from browser_bot.sites import load_component_config, save_component_config
+
+                    cfg = load_component_config(site, component) or {}
+                    sub = cfg.setdefault("submission", {})
+                    if isinstance(sub, dict):
+                        sub["response_selector"] = submission["response_selector"]
+                        if submission.get("response_capture_mode"):
+                            sub["response_capture_mode"] = submission["response_capture_mode"]
+                        else:
+                            sub.pop("response_capture_mode", None)
+                        if submission.get("response_role_selector"):
+                            sub["response_role_selector"] = submission["response_role_selector"]
+                        else:
+                            sub.pop("response_role_selector", None)
+                        sub.pop("response_list_selector", None)
+                        sub.pop("response_within_selector", None)
+                        sub.pop("response_text_within_selector", None)
+                        save_component_config(site, component, cfg)
+                        print(
+                            f"  [~] Persisted healed response_selector: "
+                            f"{submission['response_selector']}",
+                            flush=True,
+                        )
+                except Exception:
+                    pass
+        return text, cand
+    return "", {}
 
 
 async def _resolve_response_read_locator(
@@ -1989,14 +2185,14 @@ async def _resolve_response_read_locator(
         return await _last_visible_within(target)
 
     if mode == "role":
+        # Read assistant roots directly. Do not nest response_list_selector under them —
+        # that looks for descendants and misses the reply nodes themselves (ChatGPT).
         rs = role_sel or root_sel
         if not rs:
             return None
         target = page.locator(rs)
         if inner:
             target = target.locator(inner)
-        elif list_sel:
-            target = target.locator(list_sel)
         if await target.count() == 0:
             return None
         return await _last_visible_within(target)
@@ -2953,14 +3149,24 @@ async def _do_one_submit_step(
     previous_response_text = None
     previous_node_count: int | None = None
     if response_selector and str(response_selector).strip():
-        probe_sel = (
-            response_list_selector.strip()
-            or response_role_selector.strip()
-            or response_selector.strip()
-        )
+        # Role mode: only probe assistant roots (never all-role list_selector).
+        cap_mode = (response_capture_mode or "last").strip().lower()
+        if cap_mode == "role":
+            probe_sel = (
+                response_role_selector.strip()
+                or response_selector.strip()
+            )
+            # Nested list under role roots is unused and must not affect counts.
+            response_list_selector = ""
+        else:
+            probe_sel = (
+                response_list_selector.strip()
+                or response_role_selector.strip()
+                or response_selector.strip()
+            )
         sel = probe_sel
         try:
-            has_nodes = await page.locator(sel).count() > 0
+            has_nodes = await page.locator(sel).count() > 0 if sel else False
         except Exception:
             has_nodes = False
         if has_nodes:
@@ -3247,6 +3453,30 @@ async def _do_one_submit_step(
             else:
                 response_text = full_content
 
+    healed_response_fields: dict[str, str] = {}
+    if (
+        response_selector
+        and str(response_selector).strip()
+        and (not response_text or not is_actionable_response(response_text, ctx))
+    ):
+        healed_text, healed_response_fields = await _try_response_capture_heal(
+            page,
+            response_selector=str(response_selector or ""),
+            response_capture_mode=str(response_capture_mode or ""),
+            response_list_selector=str(response_list_selector or ""),
+            response_role_selector=str(response_role_selector or ""),
+            response_within_selector=str(response_within_selector or ""),
+            response_text_within_selector=str(response_text_within_selector or ""),
+            filter_ctx=ctx,
+            exclude_text=text,
+            submission=submission if isinstance(submission, dict) else None,
+            site=site,
+            component=component,
+        )
+        if healed_text:
+            full_content = healed_text
+            response_text = healed_text
+
     raw_response = response_text
     response_text = sanitize_captured_response(response_text, ctx)
     if raw_response and not response_text:
@@ -3304,6 +3534,12 @@ async def _do_one_submit_step(
         submission_meta["healed_submit_selector"] = healed_submit
     elif healed_submit == "enter":
         submission_meta["healed_submit_via"] = "enter"
+    if healed_response_fields.get("response_selector"):
+        submission_meta["healed_response_selector"] = healed_response_fields["response_selector"]
+        if healed_response_fields.get("response_capture_mode"):
+            submission_meta["healed_response_capture_mode"] = healed_response_fields[
+                "response_capture_mode"
+            ]
     final_text = response_text if (response_text and str(response_text).strip()) else full_content
     if (
         final_text

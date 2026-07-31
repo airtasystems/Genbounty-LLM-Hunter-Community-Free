@@ -12,7 +12,11 @@ from browser_bot.page_blockers import (
     PageBlockedError,
     ensure_page_ready_for_submit,
 )
-from browser_bot.sites import get_storage_state_path, get_submission_config
+from browser_bot.sites import (
+    browser_ui_session_ready,
+    get_browser_storage_state_path,
+    get_submission_config,
+)
 
 from browser_bot.submit.common import (
     NonSuccessResponseError,
@@ -99,6 +103,46 @@ async def do_ui_submit_with_page(
         )
 
         prompt_text = append_test_prompt_delimiter(text)
+        # Same capture upgrade Configure uses (role roots, drop nested list_selector).
+        eff_response_selector = response_selector
+        eff_within = response_within_selector
+        eff_text_within = response_text_within_selector
+        eff_mode = response_capture_mode
+        eff_list = response_list_selector
+        eff_role = response_role_selector
+        try:
+            from browser_bot.record_submission import upgrade_response_capture_kwargs
+
+            tmp_sub = dict(submission or {})
+            tmp_sub["response_selector"] = response_selector
+            tmp_sub["response_within_selector"] = response_within_selector
+            tmp_sub["response_text_within_selector"] = response_text_within_selector
+            tmp_sub["response_capture_mode"] = response_capture_mode
+            tmp_sub["response_list_selector"] = response_list_selector
+            tmp_sub["response_role_selector"] = response_role_selector
+            upgraded = await upgrade_response_capture_kwargs(page, tmp_sub)
+            eff_response_selector = upgraded.get("response_selector") or response_selector
+            eff_mode = upgraded.get("response_capture_mode") or response_capture_mode or "last"
+            eff_list = upgraded.get("response_list_selector") or ""
+            eff_role = upgraded.get("response_role_selector") or response_role_selector
+            if str(eff_mode).strip().lower() == "role":
+                eff_list = ""
+                if not eff_role:
+                    eff_role = eff_response_selector
+            if isinstance(submission, dict):
+                submission["response_selector"] = eff_response_selector
+                if str(eff_mode).strip().lower() == "role":
+                    submission["response_capture_mode"] = "role"
+                    submission["response_role_selector"] = eff_role
+                    submission.pop("response_list_selector", None)
+                elif eff_mode and eff_mode != "last":
+                    submission["response_capture_mode"] = eff_mode
+                    if eff_list:
+                        submission["response_list_selector"] = eff_list
+        except Exception:
+            if str(eff_mode).strip().lower() == "role":
+                eff_list = ""
+
         filter_ctx = filter_context_from_submission(
             submission, prompt_text, site=site, component=component
         )
@@ -107,12 +151,12 @@ async def do_ui_submit_with_page(
             active_inputs,
             submit_selector,
             prompt_text,
-            response_selector=response_selector,
-            response_within_selector=response_within_selector,
-            response_text_within_selector=response_text_within_selector,
-            response_capture_mode=response_capture_mode,
-            response_list_selector=response_list_selector,
-            response_role_selector=response_role_selector,
+            response_selector=eff_response_selector,
+            response_within_selector=eff_within,
+            response_text_within_selector=eff_text_within,
+            response_capture_mode=eff_mode,
+            response_list_selector=eff_list,
+            response_role_selector=eff_role,
             submit_via=submit_via,
             response_wait_ms=response_wait_ms,
             test_case=test_case,
@@ -250,9 +294,9 @@ async def run_ui_submission_single(
     if not posts:
         return [], None
 
-    storage_path = get_storage_state_path(site, component)
-    if not storage_path:
+    if not browser_ui_session_ready(site, component):
         return [], None
+    storage_path = get_browser_storage_state_path(site, component)
 
     start_url = sub["start_url"]
     inputs: list[dict] = sub["inputs"]
@@ -283,7 +327,7 @@ async def run_ui_submission_single(
 
     results: list[tuple[str, str | None]] = []
     submission_metas: list[dict[str, Any]] = []
-    storage_str = str(storage_path)
+    storage_str = str(storage_path) if storage_path else None
     page_kw = fetcher_with_page_kwargs(site, component, start_url=start_url)
 
     stop_words = load_run_stop_words(suite_path)

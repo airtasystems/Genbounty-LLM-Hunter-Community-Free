@@ -292,9 +292,13 @@ async def _probe_browser(
     run_capability_probe: bool = False,
 ) -> dict[str, Any]:
     """Navigate to target_url with auth and capture HTML + UI hints."""
-    from browser_bot.browser.launcher import launch_context_for_request, launch_context_with_routes
+    from browser_bot.browser.launcher import (
+        launch_context_for_request,
+        launch_context_with_routes,
+        launch_persistent_context,
+    )
     from browser_bot.page_blockers import PageBlockedError, _resolve_cloudflare_challenge
-    from browser_bot.sites import get_storage_state_path
+    from browser_bot.sites import get_browser_storage_state_path, resolve_login_profile_path
     from playwright.async_api import async_playwright
 
     result: dict[str, Any] = {
@@ -311,8 +315,9 @@ async def _probe_browser(
     }
     network_urls: set[str] = set()
     network_log: list[dict[str, Any]] = []
-    storage_path = get_storage_state_path(site, component)
+    storage_path = get_browser_storage_state_path(site, component)
     storage_str = str(storage_path) if storage_path and storage_path.exists() else None
+    profile_path = resolve_login_profile_path(site, component)
     har_str = str(har_path) if har_path else None
     if har_path:
         har_path.parent.mkdir(parents=True, exist_ok=True)
@@ -438,14 +443,29 @@ async def _probe_browser(
 
     async def _run_headed() -> None:
         async with async_playwright() as p:
-            browser, context = await launch_context_for_request(
-                p,
-                storage_state_path=storage_str,
-                headless=False,
-                allow_all=True,
-                force_human=True,
-                record_har_path=har_str,
-            )
+            browser = None
+            # HAR recording cannot use CDP; prefer the login profile persistent context.
+            if profile_path.exists() and har_str:
+                browser, context = await launch_persistent_context(
+                    p,
+                    str(profile_path),
+                    headless=False,
+                    site=site,
+                    component=component,
+                    record_har_path=har_str,
+                )
+            else:
+                browser, context = await launch_context_for_request(
+                    p,
+                    storage_state_path=storage_str,
+                    headless=False,
+                    allow_all=True,
+                    force_human=True,
+                    record_har_path=har_str if not profile_path.exists() else None,
+                    site=site,
+                    component=component,
+                    start_url=target_url,
+                )
             page = await context.new_page()
             try:
                 await _capture_page(page)
@@ -453,7 +473,8 @@ async def _probe_browser(
                 result["error"] = result["error"] or str(exc)
             finally:
                 await context.close()
-                await browser.close()
+                if browser is not None:
+                    await browser.close()
 
     if headless:
         async with async_playwright() as p:

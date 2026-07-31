@@ -419,6 +419,37 @@ def resolve_auth_read_path(site: str, component: str | None = None) -> Path | No
     return locations[0][2] if locations else None
 
 
+def auth_data_has_browser_session(data: dict[str, Any] | None) -> bool:
+    """True when auth.json carries cookies/origin storage usable by a UI browser.
+
+    API-key-only configs (including sibling OpenAI keys) are not a browser session.
+    """
+    if not isinstance(data, dict):
+        return False
+    mode = str(data.get("auth_mode") or "").strip().lower()
+    if mode in ("api_key", "none"):
+        return False
+    if data.get("cookies"):
+        return True
+    return any(
+        isinstance(origin, dict)
+        and (origin.get("localStorage") or origin.get("sessionStorage"))
+        for origin in data.get("origins") or []
+    )
+
+
+def resolve_browser_auth_read_path(site: str, component: str | None = None) -> Path | None:
+    """Auth file for UI browser launches — skips api_key / public stubs.
+
+    Sibling API-key auth must not be treated as a ChatGPT (etc.) browser session.
+    """
+    for _scope, _source, path in _configured_auth_locations(site, component):
+        data = _load_auth_file(path)
+        if auth_data_has_browser_session(data):
+            return path
+    return None
+
+
 def resolve_auth_scope(site: str, component: str | None = None) -> str:
     """Return ``component``, ``site``, ``shared``, or ``none`` for the resolved auth file."""
     locations = _configured_auth_locations(site, component)
